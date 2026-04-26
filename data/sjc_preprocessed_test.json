@@ -1,0 +1,32 @@
+[
+  {
+    "thương_hiệu": "SJC",
+    "loại_vàng": "Vàng miếng (1L, 10L)",
+    "giá_mua": 168300000,
+    "giá_bán": 171300000,
+    "thời_gian_thu_thập": "2026-04-20",
+    "mid_price": 169800000.0,
+    "spread": 3000000,
+    "ema_3": 169800000.0
+  },
+  {
+    "thương_hiệu": "SJC",
+    "loại_vàng": "Vàng miếng (1L, 10L)",
+    "giá_mua": 168100000,
+    "giá_bán": 170600000,
+    "thời_gian_thu_thập": "2026-04-21",
+    "mid_price": 169350000.0,
+    "spread": 2500000,
+    "ema_3": 169575000.0
+  },
+  {
+    "thương_hiệu": "SJC",
+    "loại_vàng": "Vàng miếng (1L, 10L)",
+    "giá_mua": 167500000,
+    "giá_bán": 170000000,
+    "thời_gian_thu_thập": "2026-04-22",
+    "mid_price": 168750000.0,
+    "spread": 2500000,
+    "ema_3": 169162500.0
+  }
+]

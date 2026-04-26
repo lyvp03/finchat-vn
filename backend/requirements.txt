@@ -1,0 +1,23 @@
+# backend/requirements.txt
+vnstock==0.2.9.2.3
+yfinance
+pandas
+pandas-ta
+httpx
+scrapy
+clickhouse-driver
+apscheduler
+fastapi
+uvicorn
+python-dotenv
+transformers
+torch
+ipython
+fastapi[standard]==0.115.12
+uvicorn[standard]==0.34.2
+python-multipart==0.0.20
+clickhouse-connect
+chromadb
+sentence-transformers
+google-generativeai
+requests
