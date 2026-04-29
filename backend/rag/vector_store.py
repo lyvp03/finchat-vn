@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from core.config import settings
+from rag.chunker import NewsChunk, chunk_article
 from rag.embedder import SentenceTransformerEmbedder, article_to_embedding_text
 
 
@@ -48,18 +49,47 @@ class GoldNewsVectorStore:
         )
         return len(eligible)
 
+    def upsert_chunks(self, chunks: List[NewsChunk]) -> int:
+        eligible = [chunk for chunk in chunks if chunk.chunk_id]
+        if not eligible:
+            return 0
+
+        documents = [chunk.display_text for chunk in eligible]
+        embeddings = self.embedder.embed([chunk.embed_text for chunk in eligible])
+        ids = [chunk.chunk_id for chunk in eligible]
+        metadatas = [self._chunk_metadata(chunk) for chunk in eligible]
+
+        self.collection.upsert(
+            ids=ids,
+            documents=documents,
+            embeddings=embeddings,
+            metadatas=metadatas,
+        )
+        return len(eligible)
+
+    def upsert_chunked_articles(self, articles: List[Dict[str, Any]]) -> int:
+        chunks = []
+        for article in articles:
+            chunks.extend(chunk_article(article))
+        return self.upsert_chunks(chunks)
+
     def search(
         self,
         query: str,
         top_k: int = 5,
         market_scope: Optional[str] = None,
         event_type: Optional[str] = None,
+        published_from_ts: Optional[int] = None,
+        published_to_ts: Optional[int] = None,
+        source_name: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         where = {}
         if market_scope:
             where["market_scope"] = market_scope
         if event_type:
             where["event_type"] = event_type
+        if source_name:
+            where["source_name"] = source_name
 
         embeddings = self.embedder.embed([query])
         result = self.collection.query(
@@ -78,6 +108,9 @@ class GoldNewsVectorStore:
             metadata = metadatas[idx] or {}
             rows.append({
                 "id": article_id,
+                "doc_id": metadata.get("doc_id", metadata.get("id", "")),
+                "chunk_id": metadata.get("chunk_id", article_id),
+                "chunk_index": metadata.get("chunk_index", 0),
                 "title": metadata.get("title", ""),
                 "source_name": metadata.get("source_name", ""),
                 "market_scope": metadata.get("market_scope", ""),
@@ -85,6 +118,7 @@ class GoldNewsVectorStore:
                 "sentiment_score": metadata.get("sentiment_score", 0.0),
                 "impact_score": metadata.get("impact_score", 0.0),
                 "published_at": metadata.get("published_at", ""),
+                "url": metadata.get("url", ""),
                 "document": documents[idx] if idx < len(documents) else "",
                 "distance": distances[idx] if idx < len(distances) else None,
             })
@@ -106,3 +140,13 @@ class GoldNewsVectorStore:
             "impact_score": float(article.get("impact_score") or 0),
             "published_at": published_at.isoformat() if hasattr(published_at, "isoformat") else str(published_at or ""),
         }
+
+    @staticmethod
+    def _chunk_metadata(chunk: NewsChunk) -> Dict[str, Any]:
+        metadata = dict(chunk.metadata)
+        for key in ("symbols", "tags"):
+            if key in metadata:
+                metadata[key] = ",".join(str(item) for item in metadata.get(key) or [])
+        if metadata.get("published_at_ts") is None:
+            metadata["published_at_ts"] = 0
+        return metadata

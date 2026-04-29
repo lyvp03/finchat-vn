@@ -48,7 +48,8 @@ class GoldNewsRepository:
                     article.is_relevant,
                     article.market_scope,
                     article.raw_payload,
-                    article.extra_metadata
+                    article.extra_metadata,
+                    article.news_tier,
                 ])
             
             column_names = [
@@ -56,7 +57,7 @@ class GoldNewsRepository:
                 'published_at', 'crawled_at', 'updated_at', 'category', 'language', 'region', 'event_type',
                 'symbols', 'tags', 'entities', 'sentiment_score', 'impact_score', 'relevance_score',
                 'content_hash', 'title_hash', 'is_duplicate', 'quality_score', 'is_relevant',
-                'market_scope', 'raw_payload', 'extra_metadata'
+                'market_scope', 'raw_payload', 'extra_metadata', 'news_tier'
             ]
             
             self.client.insert('gold_news', data, column_names=column_names)
@@ -213,8 +214,10 @@ class GoldNewsRepository:
         min_content_len = max(1, int(min_content_len))
 
         rows = self.client.query(f"""
-            SELECT id, title, summary, content, source_name, market_scope, event_type,
-                   sentiment_score, impact_score, published_at
+            SELECT id, title, summary, content, source_name, source_type, url,
+                   published_at, language, region, event_type, symbols, tags,
+                   sentiment_score, impact_score, relevance_score, quality_score,
+                   is_relevant, market_scope, news_tier
             FROM gold_news FINAL
             WHERE is_relevant = 1
               AND quality_score >= {min_quality}
@@ -230,11 +233,21 @@ class GoldNewsRepository:
                 "summary": row[2],
                 "content": row[3],
                 "source_name": row[4],
-                "market_scope": row[5],
-                "event_type": row[6],
-                "sentiment_score": row[7],
-                "impact_score": row[8],
-                "published_at": row[9],
+                "source_type": row[5],
+                "url": row[6],
+                "published_at": row[7],
+                "language": row[8],
+                "region": row[9],
+                "event_type": row[10],
+                "symbols": list(row[11] or []),
+                "tags": list(row[12] or []),
+                "sentiment_score": row[13],
+                "impact_score": row[14],
+                "relevance_score": row[15],
+                "quality_score": row[16],
+                "is_relevant": bool(row[17]),
+                "market_scope": row[18],
+                "news_tier": row[19],
             }
             for row in rows
         ]

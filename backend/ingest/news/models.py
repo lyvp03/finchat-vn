@@ -49,6 +49,7 @@ class NewsArticle:
     is_duplicate: bool = False
     raw_payload: str = ""
     extra_metadata: str = ""
+    news_tier: str = "contextual"  # direct | contextual | weak
 
     def generate_hashes(self):
         """Chuẩn hóa URL và sinh hash. Content hash fallback khi content rỗng/ngắn."""

@@ -13,11 +13,17 @@ def get_llm_client() -> BaseLLMClient:
 
     if provider == "ollama":
         from core.llm.ollama_client import OllamaClient
-        logger.info("Using Ollama provider: model=%s", settings.LLM_MODEL)
+        is_cloud = "ollama.com" in settings.OLLAMA_BASE_URL
+        logger.info(
+            "Using Ollama provider: model=%s cloud=%s base_url=%s",
+            settings.LLM_MODEL, is_cloud, settings.OLLAMA_BASE_URL,
+        )
         return OllamaClient(
             model=settings.LLM_MODEL,
             base_url=settings.OLLAMA_BASE_URL,
             temperature=settings.LLM_TEMPERATURE,
+            api_key=settings.OLLAMA_API_KEY or None,
+            timeout=settings.LLM_TIMEOUT_SECONDS,
         )
 
     if provider == "gemini":

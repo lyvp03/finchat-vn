@@ -391,3 +391,69 @@ def compute_impact_score(article) -> float:
         impact = min(impact, 0.20)
 
     return round(min(max(impact, 0.0), 1.0), 4)
+
+
+# ══════════════════════════════════════════════════════
+# NEWS TIER CLASSIFICATION
+# ══════════════════════════════════════════════════════
+
+# Keywords indicating a headline is DIRECTLY about gold price movement
+_DIRECT_PRICE_VERBS_VI = [
+    "tăng", "giảm", "lao dốc", "vọt", "tăng vọt", "giảm mạnh", "tăng mạnh",
+    "biến động", "đạt đỉnh", "rớt", "đi ngang", "lên", "xuống",
+    "chạm mốc", "vượt mốc", "phá đỉnh", "lập đỉnh",
+]
+
+_DIRECT_PRICE_VERBS_EN = [
+    "rise", "rises", "rose", "fall", "falls", "fell", "drop", "drops",
+    "surge", "surges", "surged", "plunge", "plunges", "spike", "spikes",
+    "climb", "climbs", "slip", "slips", "slid", "tumble", "tumbles",
+    "hit", "hits", "record", "soar", "soars", "rally", "rallies",
+]
+
+_GOLD_PRICE_PHRASES_VI = [
+    "giá vàng", "vàng sjc", "vàng miếng", "vàng nhẫn", "giá sjc",
+    "vàng trong nước", "vàng thế giới",
+]
+
+_GOLD_PRICE_PHRASES_EN = [
+    "gold price", "gold prices", "spot gold", "gold futures",
+    "xauusd", "xau/usd", "comex gold",
+]
+
+
+def classify_news_tier(article) -> str:
+    """
+    Classify news article into evidence tiers.
+
+    Returns:
+        'direct'     — headline directly about gold price change
+        'contextual' — related to gold market / macro factors
+        'weak'       — loosely related or opinion
+    """
+    title = (getattr(article, "title", "") or "").lower()
+    summary = (getattr(article, "summary", "") or "").lower()
+    combined = f"{title} {summary}"
+
+    # --- DIRECT: title mentions gold + price movement ---
+    has_gold_phrase = any(p in combined for p in _GOLD_PRICE_PHRASES_VI + _GOLD_PRICE_PHRASES_EN)
+    has_price_verb = any(v in combined for v in _DIRECT_PRICE_VERBS_VI + _DIRECT_PRICE_VERBS_EN)
+
+    if has_gold_phrase and has_price_verb:
+        return "direct"
+
+    # --- Also direct if event_type is price_movement and relevance is high ---
+    event_type = getattr(article, "event_type", "")
+    relevance = getattr(article, "relevance_score", 0)
+    if event_type == "price_movement" and relevance >= 0.5:
+        return "direct"
+
+    # --- CONTEXTUAL: mentions gold keywords OR macro keywords ---
+    has_gold_keyword = any(k in combined for k in DIRECT_GOLD_KEYWORDS)
+    has_macro_keyword = any(k in combined for k in MACRO_KEYWORDS)
+
+    if has_gold_keyword or has_macro_keyword:
+        return "contextual"
+
+    # --- WEAK: everything else ---
+    return "weak"

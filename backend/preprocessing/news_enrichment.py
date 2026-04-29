@@ -22,6 +22,7 @@ from utils.news_processing import (
     extract_entities,
     classify_event_type,
     compute_impact_score,
+    classify_news_tier,
 )
 from ml.sentiment import score_sentiment
 
@@ -60,6 +61,9 @@ def enrich_article(article: NewsArticle) -> NewsArticle:
 
     # Phase 9: Impact (dùng event_type + relevance + quality)
     article.impact_score = compute_impact_score(article)
+
+    # Phase 10: News tier (direct / contextual / weak)
+    article.news_tier = classify_news_tier(article)
 
     # Mark updated
     article.updated_at = datetime.now()

@@ -31,6 +31,11 @@ class SentenceTransformerEmbedder:
         vectors = self.model.encode(texts, normalize_embeddings=True)
         return [vector.tolist() for vector in vectors]
 
+    def dimension(self) -> int:
+        if hasattr(self.model, "get_embedding_dimension"):
+            return int(self.model.get_embedding_dimension())
+        return int(self.model.get_sentence_embedding_dimension())
+
 
 def article_to_embedding_text(article: dict) -> str:
     title = article.get("title") or ""
