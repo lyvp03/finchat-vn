@@ -43,13 +43,15 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Sanitize secrets
+        run: |
+          echo "CLICKHOUSE_HOST=$(echo '${{ secrets.CLICKHOUSE_HOST }}' | tr -d '\r\n')" >> $GITHUB_ENV
+          echo "CLICKHOUSE_PORT=$(echo '${{ secrets.CLICKHOUSE_PORT }}' | tr -d '\r\n')" >> $GITHUB_ENV
+          echo "CLICKHOUSE_USER=$(echo '${{ secrets.CLICKHOUSE_USER }}' | tr -d '\r\n')" >> $GITHUB_ENV
+          echo "CLICKHOUSE_PASSWORD=$(echo '${{ secrets.CLICKHOUSE_PASSWORD }}' | tr -d '\r\n')" >> $GITHUB_ENV
+          echo "CLICKHOUSE_DATABASE=$(echo '${{ secrets.CLICKHOUSE_DATABASE }}' | tr -d '\r\n')" >> $GITHUB_ENV
+
       - name: Run backfill
-        env:
-          CLICKHOUSE_HOST: ${{ secrets.CLICKHOUSE_HOST }}
-          CLICKHOUSE_PORT: ${{ secrets.CLICKHOUSE_PORT }}
-          CLICKHOUSE_USER: ${{ secrets.CLICKHOUSE_USER }}
-          CLICKHOUSE_PASSWORD: ${{ secrets.CLICKHOUSE_PASSWORD }}
-          CLICKHOUSE_DATABASE: ${{ secrets.CLICKHOUSE_DATABASE }}
         run: |
           SOURCE=${{ github.event.inputs.source }}
           LIMIT=${{ github.event.inputs.limit }}
