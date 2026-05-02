@@ -1,0 +1,122 @@
+name: One-time Backfill (Manual Only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: 'Source to backfill'
+        required: true
+        type: choice
+        options:
+          - all
+          - price
+          - market
+          - vnexpress
+          - cafef
+          - kitco
+          - reuters
+      limit:
+        description: 'Number of articles per news source (ignored for price/market)'
+        required: true
+        default: '200'
+      price_days:
+        description: 'Days of historical price to backfill'
+        required: true
+        default: '90'
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run backfill
+        env:
+          CLICKHOUSE_HOST: ${{ secrets.CLICKHOUSE_HOST }}
+          CLICKHOUSE_PORT: ${{ secrets.CLICKHOUSE_PORT }}
+          CLICKHOUSE_USER: ${{ secrets.CLICKHOUSE_USER }}
+          CLICKHOUSE_PASSWORD: ${{ secrets.CLICKHOUSE_PASSWORD }}
+          CLICKHOUSE_DATABASE: ${{ secrets.CLICKHOUSE_DATABASE }}
+        run: |
+          SOURCE=${{ github.event.inputs.source }}
+          LIMIT=${{ github.event.inputs.limit }}
+          DAYS=${{ github.event.inputs.price_days }}
+
+          backfill_price() {
+            echo "=== Backfilling gold price ($DAYS days) ==="
+            python -c "
+          from ingest.price.sources.vang_today import VangTodayCrawler
+          from ingest.price.parsers.vang_today_parser import VangTodayParser
+          from ingest.price.repositories.gold_price_repository import GoldPriceRepository
+          from ingest.price.services.price_ingest_service import PriceIngestService
+          from ingest.price.models import TYPE_CODES
+          from core.db import get_clickhouse_client
+          from preprocessing.compute_indicators import prepare_updates
+          import pandas as pd, time
+
+          client = get_clickhouse_client()
+          crawler = VangTodayCrawler()
+          parser = VangTodayParser()
+          repo = GoldPriceRepository(client)
+          days = int('$DAYS')
+          all_records = []
+          for code in TYPE_CODES:
+              payload = crawler.fetch_raw(code, days=days)
+              records = parser.parse(code, payload)
+              all_records.extend(records)
+              time.sleep(0.3)
+          rows = [{'ts': r.ts, 'type_code': r.type_code, 'brand': r.brand,
+                   'gold_type': r.gold_type, 'buy_price': r.buy_price,
+                   'sell_price': r.sell_price, 'mid_price': r.mid_price,
+                   'spread': r.spread, 'source_site': r.source_site} for r in all_records]
+          df = pd.DataFrame(rows)
+          df['ts'] = pd.to_datetime(df['ts'])
+          processed = prepare_updates(df)
+          repo.save_dataframe(processed)
+          print(f'Price backfill done: {len(processed)} rows')
+          "
+          }
+
+          backfill_market() {
+            echo "=== Backfilling market data (XAUUSD, USDVND, $DAYS days) ==="
+            python -c "
+          from ingest.market.repositories.market_price_repository import MarketPriceRepository
+          from ingest.market.services.market_ingest_service import MarketIngestService
+          from core.db import get_clickhouse_client
+          client = get_clickhouse_client()
+          repo = MarketPriceRepository(client)
+          svc = MarketIngestService(repo)
+          svc.run_incremental(period='${DAYS}d')
+          print('Market backfill done')
+          "
+          }
+
+          backfill_news() {
+            local src=$1
+            echo "=== Backfilling $src (limit=$LIMIT) ==="
+            python -m ingest.news.services.news_backfill_service --source $src --limit $LIMIT
+          }
+
+          case "$SOURCE" in
+            all)
+              backfill_price
+              backfill_market
+              for src in vnexpress cafef kitco reuters; do backfill_news $src; done
+              ;;
+            price)   backfill_price ;;
+            market)  backfill_market ;;
+            *)       backfill_news $SOURCE ;;
+          esac
