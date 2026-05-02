@@ -15,16 +15,6 @@ from ingest.price.repositories.gold_price_repository import GoldPriceRepository
 from ingest.price.services.price_ingest_service import PriceIngestService
 
 # ── News imports ──
-from ingest.news.sources.vnexpress import VnExpressCrawler
-from ingest.news.parsers.vnexpress_parser import VnExpressParser
-from ingest.news.sources.kitco import KitcoCrawler
-from ingest.news.parsers.kitco_parser import KitcoParser
-from ingest.news.sources.cafef import CafeFCrawler
-from ingest.news.parsers.cafef_parser import CafeFParser
-from ingest.news.repositories.gold_news_repository import GoldNewsRepository
-from ingest.news.services.news_dedupe_service import NewsDedupeService
-from ingest.news.services.news_ingest_service import NewsIngestService
-
 from ingest.news.services.news_backfill_service import run_reuters_backfill
 
 # ── Core imports ──
@@ -53,62 +43,37 @@ def job_update_gold_price():
         logger.error(f"Error during price update: {e}")
 
 
-def job_update_gold_news():
-    logger.info("Triggering scheduled VnExpress news update...")
+def _run_news_source(source_name: str, limit: int = 30):
+    """Shared helper: crawl a single news source."""
+    from ingest.news.services.news_backfill_service import build_ingest_service
+    logger.info("Triggering scheduled %s news update...", source_name)
     try:
         client = get_clickhouse_client()
-        crawler = VnExpressCrawler()
-        parser = VnExpressParser()
-        repository = GoldNewsRepository(client)
-        dedupe_service = NewsDedupeService(repository)
-        ingest_service = NewsIngestService(crawler, parser, repository, dedupe_service)
-
-        ingest_service.run_incremental(limit=30)
-        logger.info("VnExpress news update completed successfully.")
+        ingest_service = build_ingest_service(source_name, client)
+        if ingest_service is None:
+            # Reuters uses its own backfill flow
+            run_reuters_backfill(client, limit=limit)
+        else:
+            ingest_service.run_incremental(limit=limit)
+        logger.info("%s news update completed successfully.", source_name)
     except Exception as e:
-        logger.error(f"Error during VnExpress news update: {e}")
+        logger.error("Error during %s news update: %s", source_name, e)
+
+
+def job_update_gold_news():
+    _run_news_source("vnexpress")
 
 
 def job_update_kitco_news():
-    logger.info("Triggering scheduled Kitco news update...")
-    try:
-        client = get_clickhouse_client()
-        crawler = KitcoCrawler()
-        parser = KitcoParser()
-        repository = GoldNewsRepository(client)
-        dedupe_service = NewsDedupeService(repository)
-        ingest_service = NewsIngestService(crawler, parser, repository, dedupe_service)
-
-        ingest_service.run_incremental(limit=30)
-        logger.info("Kitco news update completed successfully.")
-    except Exception as e:
-        logger.error(f"Error during Kitco news update: {e}")
+    _run_news_source("kitco")
 
 
 def job_update_cafef_news():
-    logger.info("Triggering scheduled CafeF news update...")
-    try:
-        client = get_clickhouse_client()
-        crawler = CafeFCrawler()
-        parser = CafeFParser()
-        repository = GoldNewsRepository(client)
-        dedupe_service = NewsDedupeService(repository)
-        ingest_service = NewsIngestService(crawler, parser, repository, dedupe_service)
-
-        ingest_service.run_incremental(limit=30)
-        logger.info("CafeF news update completed successfully.")
-    except Exception as e:
-        logger.error(f"Error during CafeF news update: {e}")
+    _run_news_source("cafef")
 
 
 def job_update_reuters_news():
-    logger.info("Triggering scheduled Reuters news update...")
-    try:
-        client = get_clickhouse_client()
-        run_reuters_backfill(client, limit=30)
-        logger.info("Reuters news update completed successfully.")
-    except Exception as e:
-        logger.error(f"Error during Reuters news update: {e}")
+    _run_news_source("reuters")
 
 
 def job_preprocess_news():

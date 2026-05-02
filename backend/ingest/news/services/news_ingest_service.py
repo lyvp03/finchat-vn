@@ -1,16 +1,19 @@
 import logging
-from ingest.news.sources.vnexpress import VnExpressCrawler
-from ingest.news.parsers.vnexpress_parser import VnExpressParser
+from typing import Any
+
 from ingest.news.repositories.gold_news_repository import GoldNewsRepository
 from ingest.news.services.news_dedupe_service import NewsDedupeService
 
 logger = logging.getLogger("news_ingest_service")
 
+
 class NewsIngestService:
-    def __init__(self, 
-                 crawler: VnExpressCrawler, 
-                 parser: VnExpressParser, 
-                 repository: GoldNewsRepository, 
+    """Generic news ingest service — works with any crawler/parser pair."""
+
+    def __init__(self,
+                 crawler: Any,
+                 parser: Any,
+                 repository: GoldNewsRepository,
                  dedupe_service: NewsDedupeService):
         self.crawler = crawler
         self.parser = parser

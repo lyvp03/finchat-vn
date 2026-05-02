@@ -7,14 +7,9 @@ from typing import Any, Dict, Optional
 import pandas as pd
 
 from chatbot.time_range import TimeRange, extract_time_range
+from core.db import get_clickhouse_client
 from ingest.price.models import TYPE_CODE_METADATA
 from ingest.price.repositories.gold_price_repository import GoldPriceRepository
-
-
-def get_clickhouse_client():
-    from core.db import get_clickhouse_client as build_client
-
-    return build_client()
 
 
 def get_latest_price(type_code: Optional[str] = None) -> Dict[str, Any]:

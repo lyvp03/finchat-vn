@@ -1,0 +1,47 @@
+name: Crawl News (VnExpress, Kitco, CafeF, Reuters)
+
+on:
+  schedule:
+    # 08:00, 17:00 VN time (UTC+7) — 2 lần/ngày cho MVP
+    - cron: '0 1,10 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Crawl all news sources
+        env:
+          CLICKHOUSE_HOST: ${{ secrets.CLICKHOUSE_HOST }}
+          CLICKHOUSE_PORT: ${{ secrets.CLICKHOUSE_PORT }}
+          CLICKHOUSE_USER: ${{ secrets.CLICKHOUSE_USER }}
+          CLICKHOUSE_PASSWORD: ${{ secrets.CLICKHOUSE_PASSWORD }}
+          CLICKHOUSE_DATABASE: ${{ secrets.CLICKHOUSE_DATABASE }}
+        run: |
+          python -c "
+          from jobs.worker.main import (
+              job_update_gold_news,
+              job_update_kitco_news,
+              job_update_cafef_news,
+              job_update_reuters_news,
+          )
+          job_update_gold_news()
+          job_update_kitco_news()
+          job_update_cafef_news()
+          job_update_reuters_news()
+          "

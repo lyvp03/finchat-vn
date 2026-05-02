@@ -38,12 +38,17 @@ def build_ingest_service(source: str, client) -> NewsIngestService:
         from ingest.news.parsers.kitco_parser import KitcoParser
         return NewsIngestService(KitcoCrawler(), KitcoParser(), repo, dedupe)
 
+    elif source == "cafef":
+        from ingest.news.sources.cafef import CafeFCrawler
+        from ingest.news.parsers.cafef_parser import CafeFParser
+        return NewsIngestService(CafeFCrawler(), CafeFParser(), repo, dedupe)
+
     elif source == "reuters":
         # Reuters được xử lý riêng vì dùng RSS flow (không parse HTML)
         return None  # Sẽ dùng run_reuters_backfill() thay thế
 
     else:
-        raise ValueError(f"Unknown source: {source}. Supported: vnexpress, kitco, reuters")
+        raise ValueError(f"Unknown source: {source}. Supported: vnexpress, kitco, cafef, reuters")
 
 
 def run_reuters_backfill(client, limit: int = 200):
@@ -95,7 +100,7 @@ if __name__ == "__main__":
     from core.db import get_clickhouse_client
 
     parser = argparse.ArgumentParser(description="Gold News Backfill")
-    parser.add_argument("--source", required=True, choices=["vnexpress", "kitco", "reuters"])
+    parser.add_argument("--source", required=True, choices=["vnexpress", "kitco", "cafef", "reuters"])
     parser.add_argument("--limit", type=int, default=200)
     args = parser.parse_args()
 
