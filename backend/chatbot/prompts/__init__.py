@@ -6,6 +6,7 @@ from typing import Any, Dict, List
 
 from chatbot.context_compressor import compact_news_context, format_price_context
 from chatbot.prompts.base import apply_guardrails
+from chatbot.prompts.domain_knowledge import GOLD_MARKET_KNOWLEDGE
 from chatbot.prompts.hybrid_prompt import HYBRID_SYSTEM_PROMPT
 from chatbot.prompts.news_prompt import NEWS_SYSTEM_PROMPT
 from chatbot.prompts.price_prompt import PRICE_SYSTEM_PROMPT
@@ -49,7 +50,9 @@ def build_answer_messages(
         intent, len(system_prompt), price_chars, len(articles), len(context_str),
     )
 
-    messages: List[Dict[str, str]] = [{"role": "system", "content": system_prompt}]
+    messages: List[Dict[str, str]] = [
+        {"role": "system", "content": system_prompt + "\n\n" + GOLD_MARKET_KNOWLEDGE},
+    ]
     if history:
         # Filter: Ollama rejects messages without role/content or with empty content
         valid_roles = {"user", "assistant", "system"}
@@ -91,8 +94,8 @@ def _build_context_string(context: Dict[str, Any], intent: str) -> str:
         price_text = format_price_context(context.get("price"))
         parts.append(f"=== PRICE DATA ===\n{price_text}")
 
-    # Market data (XAUUSD + USDVND) — only for hybrid
-    if intent == "hybrid":
+    # Market data (XAUUSD + USDVND) — for price_sql and hybrid
+    if intent in ("price_sql", "hybrid"):
         market = context.get("market")
         if market:
             market_lines = []

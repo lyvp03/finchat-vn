@@ -214,6 +214,15 @@ def analyze_question(question: str) -> RouteResult:
             signals=signals,
         )
 
+    # Fallback: user mentions gold but no specific signal → treat as hybrid
+    if has_generic_gold:
+        return RouteResult(
+            intent="hybrid",
+            confidence=0.65,
+            reason="Question mentions gold but no specific price/news signal. Defaulting to hybrid.",
+            signals=signals,
+        )
+
     return RouteResult(
         intent="general",
         confidence=0.6,

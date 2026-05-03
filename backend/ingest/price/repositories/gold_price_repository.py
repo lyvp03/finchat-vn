@@ -115,3 +115,25 @@ class GoldPriceRepository:
 
         logger.info("Bulk inserting %s rows into gold_price", len(insert_data))
         self.client.insert("gold_price", insert_data, column_names=column_names)
+
+    def get_timeseries(self, type_code: str, days: int = 30) -> list[dict]:
+        """Fetch timeseries data for the price chart."""
+        query = """
+        SELECT ts, buy_price, sell_price, mid_price
+        FROM gold_price FINAL
+        WHERE type_code = {type_code:String}
+          AND ts >= now() - INTERVAL {days:UInt32} DAY
+        ORDER BY ts ASC
+        """
+        try:
+            df = self.client.query_df(
+                query,
+                parameters={"type_code": type_code, "days": int(days)},
+            )
+            if df.empty:
+                return []
+            df["ts"] = pd.to_datetime(df["ts"]).dt.strftime('%Y-%m-%dT%H:%M:%S')
+            return df.to_dict(orient="records")
+        except Exception as e:
+            logger.error("Failed to fetch timeseries: %s", e)
+            return []

@@ -36,7 +36,20 @@ def get_price_analysis(
     time_range = extract_time_range(question) if question else _rolling_time_range(days)
 
     if time_range.type.startswith("compare_"):
-        return _get_price_comparison(repo, type_code, time_range)
+        result = _get_price_comparison(repo, type_code, time_range)
+        # Fallback: if comparison fails, use a wider rolling window
+        # so the LLM still has useful price context
+        if not result.get("ok"):
+            fallback_days = 60 if "month" in time_range.type else 30
+            fallback_range = _rolling_time_range(fallback_days)
+            fallback = _get_rolling_price_analysis(repo, type_code, fallback_range, days=fallback_days)
+            fallback["_comparison_note"] = (
+                f"So sánh hai kỳ không thực hiện được do thiếu dữ liệu. "
+                f"Thay vào đó, đây là phân tích xu hướng {fallback_days} ngày gần nhất."
+            )
+            fallback["_original_comparison"] = result.get("missing", {})
+            return fallback
+        return result
 
     return _get_rolling_price_analysis(repo, type_code, time_range, days=days)
 

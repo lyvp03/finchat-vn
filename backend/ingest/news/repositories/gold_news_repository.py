@@ -251,3 +251,68 @@ class GoldNewsRepository:
             }
             for row in rows
         ]
+
+    def fetch_by_id(self, article_id: str) -> Optional[Dict[str, Any]]:
+        """Fetch article details by ID."""
+        rows = self.client.query(f"""
+            SELECT id, title, summary, content, source_name, url, published_at,
+                   event_type, sentiment_score, impact_score, market_scope, tags, news_tier
+            FROM gold_news FINAL
+            WHERE id = '{article_id.replace("'", "")}'
+            LIMIT 1
+        """).result_rows
+        if not rows:
+            return None
+        row = rows[0]
+        return {
+            "id": row[0],
+            "title": row[1],
+            "summary": row[2],
+            "content": row[3],
+            "source_name": row[4],
+            "url": row[5],
+            "published_at": row[6].isoformat() if hasattr(row[6], "isoformat") else str(row[6]),
+            "event_type": row[7],
+            "sentiment_score": row[8],
+            "impact_score": row[9],
+            "market_scope": row[10],
+            "tags": list(row[11] or []),
+            "news_tier": row[12],
+        }
+
+    def fetch_latest_extended(
+        self,
+        limit: int = 20,
+        market_scope: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Fetch latest relevant news rows with extended fields (url, news_tier)."""
+        limit = max(1, min(int(limit), 100))
+        where = "WHERE is_relevant = 1"
+        if market_scope:
+            safe_scope = market_scope.replace("'", "")
+            where += f" AND market_scope = '{safe_scope}'"
+
+        rows = self.client.query(f"""
+            SELECT id, title, summary, source_name, market_scope, event_type,
+                   sentiment_score, impact_score, published_at, url, news_tier
+            FROM gold_news FINAL
+            {where}
+            ORDER BY published_at DESC
+            LIMIT {limit}
+        """).result_rows
+        return [
+            {
+                "id": row[0],
+                "title": row[1],
+                "summary": row[2],
+                "source_name": row[3],
+                "market_scope": row[4],
+                "event_type": row[5],
+                "sentiment_score": row[6],
+                "impact_score": row[7],
+                "published_at": row[8].isoformat() if hasattr(row[8], "isoformat") else str(row[8]),
+                "url": row[9],
+                "news_tier": row[10],
+            }
+            for row in rows
+        ]

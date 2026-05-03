@@ -8,7 +8,8 @@ def get_clickhouse_client():
         port=settings.CLICKHOUSE_PORT,
         username=settings.CLICKHOUSE_USER,
         password=settings.CLICKHOUSE_PASSWORD,
-        database=settings.CLICKHOUSE_DATABASE
+        database=settings.CLICKHOUSE_DATABASE,
+        secure=settings.CLICKHOUSE_SECURE,
     )
 
 def insert_many_clickhouse(client, table: str, data: list, column_names: list, batch_size: int = 10000):

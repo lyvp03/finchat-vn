@@ -64,6 +64,9 @@ def compact_news_context(
             f"Ngày: {published} | "
             f"Event: {article.get('event_type', 'N/A')} | "
             f"Impact: {article.get('impact_score', 0):.2f} | "
+            f"Sentiment: {article.get('sentiment_score', 0):+.2f} | "
+            f"Tier: {article.get('news_tier', 'contextual')} | "
+            f"Scope: {article.get('market_scope', 'N/A')} | "
             f"Relevance: {score_str}\n"
             f"Nội dung:\n{short_doc}"
         )
@@ -87,13 +90,18 @@ def format_price_context(price: Dict[str, Any] | None) -> str:
 
     if price_type == "rolling":
         latest = price.get("latest", {})
-        lines = [
+        lines = []
+        # Include fallback note if this was originally a comparison request
+        comparison_note = price.get("_comparison_note")
+        if comparison_note:
+            lines.append(f"[NOTE] {comparison_note}")
+        lines.extend([
             f"Mã vàng: {price.get('type_code')} ({price.get('metadata', {}).get('name', '')})",
             f"Giai đoạn: {price.get('from', '')[:10]} → {price.get('to', '')[:10]} ({price.get('period_days')} ngày)",
             f"Xu hướng: {price.get('trend')} | Thay đổi: {price.get('change', 0):+,.0f} ({price.get('change_pct', 0):+.2f}%)",
             f"Giá mới nhất: mua {latest.get('buy_price', 0):,.0f} / bán {latest.get('sell_price', 0):,.0f} (mid: {latest.get('mid_price', 0):,.0f})",
             f"RSI14: {price.get('rsi14', 0):.1f} → {price.get('rsi_summary', 'N/A')}",
-        ]
+        ])
         top_moves = price.get("top_moves", [])
         if top_moves:
             lines.append("Top biến động:")

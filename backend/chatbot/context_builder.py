@@ -60,8 +60,8 @@ def build_context(question: str, intent: str) -> Dict[str, Any]:
             logger.error("price_tool error: %s", exc, exc_info=True)
             context["errors"].append(f"price_tool: {exc}")
 
-    # --- Market data (XAUUSD + USDVND + premium) cho hybrid ---
-    if intent == "hybrid":
+    # --- Market data (XAUUSD + USDVND + premium) cho price_sql và hybrid ---
+    if intent in ("price_sql", "hybrid"):
         try:
             from tools.market_tool import get_market_analysis, compute_premium
             days = time_range.period_days or 7

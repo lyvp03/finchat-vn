@@ -9,11 +9,15 @@ __pycache__/
 .env
 *.env
 backend/.env
+backend/.env.*
+!backend/.env.example
+!backend/.env.prod.example
 
 # Virtual env
 .venv/
 venv/
 env/
+backend/venv/
 
 # IDE
 .vscode/
@@ -24,7 +28,7 @@ env/
 Thumbs.db
 
 # Data / database runtime
-data/clickhouse/
+data/
 *.db
 *.sqlite
 *.sqlite3
@@ -33,6 +37,27 @@ data/clickhouse/
 *.log
 logs/
 
-.md
+# Backend temp / migration with creds
+backend/pytest-cache-files-*/
+backend/db/migrate_cloud.py
+backend/_check_db.py
 
-.env
+# Planning docs (local only, not pushed)
+*.md
+!README.md
+!RUNBOOK.md
+
+# Frontend build artifacts
+frontend/.next/
+frontend/node_modules/
+frontend/tsconfig.tsbuildinfo
+
+# Frontend local-only docs
+frontend/AGENTS.md
+frontend/CLAUDE.md
+
+# Agents
+.agents/
+
+# Analysis
+analysis/

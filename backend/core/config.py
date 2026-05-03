@@ -8,6 +8,12 @@ if os.path.exists(env_path):
 else:
     load_dotenv()
 
+
+def _env(name: str) -> str:
+    """Read a string env var without baking provider/model defaults into code."""
+    return os.getenv(name, "").strip()
+
+
 class Settings:
     # ClickHouse Config
     CLICKHOUSE_HOST = os.getenv("CLICKHOUSE_HOST", "localhost")
@@ -15,7 +21,8 @@ class Settings:
     CLICKHOUSE_USER = os.getenv("CLICKHOUSE_USER", "default")
     CLICKHOUSE_PASSWORD = os.getenv("CLICKHOUSE_PASSWORD", "")
     CLICKHOUSE_DATABASE = os.getenv("CLICKHOUSE_DATABASE", "gold")
-    
+    CLICKHOUSE_SECURE = os.getenv("CLICKHOUSE_SECURE", "false").lower() in ("1", "true", "yes")
+
     # Application Config
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
@@ -28,14 +35,14 @@ class Settings:
     RAG_MIN_CONTENT_LEN = 200
 
     # --- LLM ---
-    LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama")
-    LLM_MODEL = os.getenv("LLM_MODEL", "qwen2.5:7b")
+    # Provider/model are intentionally env-only so switching LLMs only requires .env changes.
+    LLM_PROVIDER = _env("LLM_PROVIDER").lower()
+    LLM_MODEL = _env("LLM_MODEL")
     LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.1"))
     LLM_TIMEOUT_SECONDS = int(os.getenv("LLM_TIMEOUT_SECONDS", "120"))
-    OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-    # Cần khi dùng Ollama Cloud (lấy tại https://ollama.com/settings/keys)
-    OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "")
-    GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
+    OLLAMA_BASE_URL = _env("OLLAMA_BASE_URL")
+    OLLAMA_API_KEY = _env("OLLAMA_API_KEY")
+    GOOGLE_API_KEY = _env("GOOGLE_API_KEY")
 
     # --- RAG / Vector DB ---
     VECTOR_STORE = os.getenv("VECTOR_STORE", "qdrant").lower()
