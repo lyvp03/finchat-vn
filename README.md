@@ -2,6 +2,8 @@
 
 AI-powered chatbot and analytics dashboard for the Vietnam gold market. Combines real-time price crawling, news aggregation with NLP sentiment analysis, and RAG-based conversational AI to deliver actionable market insights.
 
+![Dashboard Preview](docs/dashboard-preview.png)
+
 ## Architecture
 
 ```
