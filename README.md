@@ -164,6 +164,4 @@ Pipeline can also be triggered manually via GitHub Actions `workflow_dispatch`.
 - 📈 **Price Tracking** — 6 gold types + XAUUSD with historical comparison
 - 🔄 **Automated Pipeline** — GitHub Actions for hands-free data updates
 
-## License
 
-This project is developed as part of a Machine Learning course project (Nhóm 18).
