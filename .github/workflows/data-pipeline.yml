@@ -1,9 +1,9 @@
 name: Data Pipeline (Gold + News + RAG)
 
 on:
-  schedule:
+  #schedule:
     # chạy 3 lần/ngày (VN) — dùng phút lẻ để tránh bị GitHub skip
-    - cron: '37 2,6,10 * * *'  # 09:37, 13:37, 17:37
+    #- cron: '37 2,6,10 * * *'  # 09:37, 13:37, 17:37
   workflow_dispatch: {}
 
 concurrency:
