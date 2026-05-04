@@ -122,6 +122,47 @@ class GoldNewsRepository:
             logger.error(f"Failed to fetch articles: {e}")
             return []
 
+    def fetch_unenriched(self, limit: int = 500) -> List[NewsArticle]:
+        """Lấy bài chưa được enrich (sentiment_score = 0)."""
+        try:
+            query = f"""
+                SELECT id, title, summary, content, source_name, source_type, author,
+                       url, canonical_url, published_at, crawled_at, updated_at,
+                       category, language, region, event_type,
+                       symbols, tags, entities,
+                       sentiment_score, impact_score, relevance_score,
+                       content_hash, title_hash, is_duplicate, quality_score, is_relevant,
+                       market_scope, raw_payload, extra_metadata
+                FROM gold_news FINAL
+                WHERE sentiment_score = 0
+                ORDER BY published_at DESC
+                LIMIT {limit}
+            """
+            result = self.client.query(query)
+            articles = []
+            for row in result.result_rows:
+                articles.append(NewsArticle(
+                    id=row[0], title=row[1], summary=row[2], content=row[3],
+                    source_name=row[4], source_type=row[5], author=row[6],
+                    url=row[7], canonical_url=row[8],
+                    published_at=row[9], crawled_at=row[10], updated_at=row[11],
+                    category=row[12], language=row[13], region=row[14],
+                    event_type=row[15],
+                    symbols=list(row[16] or []), tags=list(row[17] or []),
+                    entities=list(row[18] or []),
+                    sentiment_score=float(row[19] or 0), impact_score=float(row[20] or 0),
+                    relevance_score=float(row[21] or 0),
+                    content_hash=row[22], title_hash=row[23],
+                    is_duplicate=bool(row[24]), quality_score=float(row[25] or 1),
+                    is_relevant=bool(row[26]),
+                    market_scope=row[27] or "", raw_payload=row[28] or "", extra_metadata=row[29] or "",
+                ))
+            logger.info(f"Fetched {len(articles)} unenriched articles.")
+            return articles
+        except Exception as e:
+            logger.error(f"Failed to fetch unenriched articles: {e}")
+            return []
+
     def get_recent_summary(self, days: int = 7) -> Dict[str, Any]:
         """Aggregate recent relevant news for chatbot context."""
         days = max(1, int(days))

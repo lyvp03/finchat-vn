@@ -89,12 +89,12 @@ def run_enrichment(limit: int = 1000):
     client = get_clickhouse_client()
     repo = GoldNewsRepository(client)
 
-    articles = repo.fetch_all(limit=limit)
+    articles = repo.fetch_unenriched(limit=limit)
     if not articles:
-        logger.info("No articles to enrich.")
+        logger.info("No unenriched articles found — skipping.")
         return
 
-    logger.info(f"Enriching {len(articles)} articles...")
+    logger.info(f"Enriching {len(articles)} unenriched articles...")
     enriched = enrich_batch(articles)
 
     success = repo.save_bulk(enriched)
