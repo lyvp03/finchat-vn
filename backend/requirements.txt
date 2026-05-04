@@ -21,3 +21,5 @@ qdrant-client
 sentence-transformers
 google-generativeai
 requests
+sentencepiece
+tiktoken
