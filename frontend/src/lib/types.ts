@@ -62,6 +62,14 @@ export interface ChatRequest {
   history: Array<{ role: string; content: string }>;
 }
 
+export type MessageStatus = "pending" | "streaming" | "done" | "error";
+
+export interface ApiError {
+  status: number;
+  message: string;
+  code?: string;
+}
+
 export interface ChatResponse {
   response: string;
   intent: string;

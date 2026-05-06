@@ -10,6 +10,8 @@ import { ArrowUpRight, ArrowDownRight, RefreshCcw, Minus, TrendingUp } from "luc
 import { Button } from "@/components/ui/button";
 import { PriceTrendChart } from "@/components/dashboard/price-trend-chart";
 import { AVAILABLE_ASSETS } from "@/components/dashboard/dashboard-toolbar";
+import { getCached, setCached } from "@/lib/cache";
+import { useRef } from "react";
 
 export default function PricesPage() {
   const [data, setData] = useState<PriceData[]>([]);
@@ -20,17 +22,40 @@ export default function PricesPage() {
   const [history, setHistory] = useState<PriceHistoryResponse | null>(null);
   const [timeseries, setTimeseries] = useState<Record<string, PriceTimeseriesPoint[]>>({});
 
-  const loadData = async () => {
+  const abortLatestRef = useRef<AbortController | null>(null);
+  const abortChartRef = useRef<AbortController | null>(null);
+  const chartSeqIdRef = useRef(0);
+
+  const loadData = async (forceRefresh = false) => {
+    if (abortLatestRef.current) {
+      abortLatestRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortLatestRef.current = controller;
+
     setIsLoading(true);
     setError(null);
     try {
-      const res = await fetchAPI<LatestPriceResponse>("/api/price/latest");
+      const endpoint = "/api/price/latest";
+      
+      if (!forceRefresh) {
+        const cached = getCached<LatestPriceResponse>(endpoint);
+        if (cached && cached.ok) {
+          setData(cached.prices);
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      const res = await fetchAPI<LatestPriceResponse>(endpoint, { signal: controller.signal });
       if (res.ok) {
+        setCached(endpoint, res, 15000); // 15s TTL for latest prices
         setData(res.prices);
       } else {
         setError("Không lấy được dữ liệu từ server");
       }
-    } catch (err) {
+    } catch (err: any) {
+      if (err.status === 408 || err.name === "AbortError") return;
       setError("Lỗi kết nối đến server");
     } finally {
       setIsLoading(false);
@@ -40,24 +65,58 @@ export default function PricesPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadData();
+    return () => {
+      if (abortLatestRef.current) abortLatestRef.current.abort();
+    };
   }, []);
 
   useEffect(() => {
     async function loadChartData() {
+      if (abortChartRef.current) {
+        abortChartRef.current.abort();
+      }
+      const controller = new AbortController();
+      abortChartRef.current = controller;
+      const currentSeq = ++chartSeqIdRef.current;
+
       try {
-        const [histRes, tsRes] = await Promise.all([
-          fetchAPI<PriceHistoryResponse>(`/api/price/history?type=${selectedAsset}&days=30`),
-          fetchAPI<PriceTimeseriesResponse>(`/api/price/timeseries?type=${selectedAsset}&days=30`)
-        ]);
-        if (histRes.ok) setHistory(histRes);
-        if (tsRes.ok && tsRes.data) {
-          setTimeseries({ [selectedAsset]: tsRes.data });
+        const histUrl = `/api/price/history?type=${selectedAsset}&days=30`;
+        const tsUrl = `/api/price/timeseries?type=${selectedAsset}&days=30`;
+
+        const cachedHist = getCached<PriceHistoryResponse>(histUrl);
+        const cachedTs = getCached<PriceTimeseriesResponse>(tsUrl);
+
+        let histRes = cachedHist;
+        let tsRes = cachedTs;
+
+        const promises = [];
+        if (!histRes) promises.push(fetchAPI<PriceHistoryResponse>(histUrl, { signal: controller.signal }));
+        else promises.push(Promise.resolve(histRes));
+        
+        if (!tsRes) promises.push(fetchAPI<PriceTimeseriesResponse>(tsUrl, { signal: controller.signal }));
+        else promises.push(Promise.resolve(tsRes));
+
+        const [newHistRes, newTsRes] = await Promise.all(promises);
+
+        if (currentSeq !== chartSeqIdRef.current) return;
+
+        if (!cachedHist && newHistRes.ok) setCached(histUrl, newHistRes, 60000);
+        if (!cachedTs && newTsRes.ok) setCached(tsUrl, newTsRes, 60000);
+
+        if (newHistRes.ok) setHistory(newHistRes as PriceHistoryResponse);
+        if (newTsRes.ok && (newTsRes as PriceTimeseriesResponse).data) {
+          setTimeseries({ [selectedAsset]: (newTsRes as PriceTimeseriesResponse).data });
         }
-      } catch (e) {
+      } catch (e: any) {
+        if (e.status === 408 || e.name === "AbortError") return;
         console.error("Failed to load chart data:", e);
       }
     }
     loadChartData();
+    
+    return () => {
+      if (abortChartRef.current) abortChartRef.current.abort();
+    };
   }, [selectedAsset]);
 
   const formatCurrency = (val: number, unit: string) => {
@@ -72,7 +131,7 @@ export default function PricesPage() {
           <h2 className="text-3xl font-bold tracking-tight">Giá vàng thời gian thực</h2>
           <p className="text-muted-foreground mt-1">Cập nhật giá mua, bán và chênh lệch các loại vàng</p>
         </div>
-        <Button variant="outline" onClick={loadData} disabled={isLoading} className="border-border/50 hover:bg-muted/50">
+        <Button variant="outline" onClick={() => loadData(true)} disabled={isLoading} className="border-border/50 hover:bg-muted/50">
           <RefreshCcw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
           Làm mới
         </Button>

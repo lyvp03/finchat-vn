@@ -22,11 +22,15 @@ export default function SettingsPage() {
   const checkHealth = async () => {
     setIsChecking(true);
     try {
-      // Check basic health
-      const healthRes = await fetchAPI<Record<string, unknown>>("/api/health");
-      setHealthStatus(healthRes.status === "ok" ? "healthy" : "error");
+      // 1. Check basic health without blocking
+      try {
+        const healthRes = await fetchAPI<Record<string, unknown>>("/api/health");
+        setHealthStatus(healthRes.status === "ok" ? "healthy" : "error");
+      } catch (err) {
+        setHealthStatus("error");
+      }
 
-      // Check data freshness
+      // 2. Check data freshness independently
       const [priceRes, newsRes] = await Promise.allSettled([
         fetchAPI<LatestPriceResponse>("/api/price/latest?type=SJL1L10"),
         fetchAPI<LatestNewsResponse>("/api/news/latest?limit=1")
@@ -36,11 +40,11 @@ export default function SettingsPage() {
       let latestNewsTs = null;
       let isStale = false;
 
-      if (priceRes.status === "fulfilled" && priceRes.value.ok && priceRes.value.prices.length > 0) {
+      if (priceRes.status === "fulfilled" && priceRes.value.ok && priceRes.value.prices?.length > 0) {
         latestPriceTs = priceRes.value.prices[0].ts;
       }
       
-      if (newsRes.status === "fulfilled" && newsRes.value.ok && newsRes.value.articles.length > 0) {
+      if (newsRes.status === "fulfilled" && newsRes.value.ok && newsRes.value.articles?.length > 0) {
         latestNewsTs = newsRes.value.articles[0].published_at;
       }
 
@@ -52,8 +56,6 @@ export default function SettingsPage() {
 
       setDataFreshness({ priceTs: latestPriceTs, newsTs: latestNewsTs, isStale });
 
-    } catch (err) {
-      setHealthStatus("error");
     } finally {
       setIsChecking(false);
     }

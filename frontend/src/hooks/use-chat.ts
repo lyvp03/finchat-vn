@@ -1,6 +1,6 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { fetchAPI } from "@/lib/api";
-import { ChatResponse, EvalResponse, EvalScores } from "@/lib/types";
+import { ChatResponse, EvalResponse, EvalScores, MessageStatus, ApiError } from "@/lib/types";
 
 export type MessageRole = "user" | "assistant";
 
@@ -8,74 +8,133 @@ export interface ChatMessage {
   id: string;
   role: MessageRole;
   content: string;
+  status: MessageStatus;
   intent?: string;
   sources?: unknown;
   eval?: EvalScores | null;
   evalLoading?: boolean;
   /** The user question that triggered this assistant response */
   questionRef?: string;
+  errorMessage?: string;
 }
 
 export function useChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const lastSubmitTimeRef = useRef<number>(0);
 
-  const sendMessage = async (content: string) => {
-    if (!content.trim()) return;
+  const runChatRequest = async (question: string, history: Array<{ role: string; content: string }>) => {
+    // 1. Cancel previous request if any
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
 
-    const userMessage: ChatMessage = {
-      id: Date.now().toString(),
-      role: "user",
-      content,
-    };
+    const assistantMsgId = (Date.now() + 1).toString();
+    
+    // 2. Add/Reset assistant placeholder
+    setMessages((prev) => {
+      const filtered = prev.filter(m => m.status !== "error" || m.questionRef !== question);
+      return [
+        ...filtered,
+        {
+          id: assistantMsgId,
+          role: "assistant",
+          content: "",
+          status: "pending",
+          questionRef: question,
+        }
+      ];
+    });
 
-    setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
     setError(null);
 
     try {
-      // Keep only last 6 messages for context
-      const history = messages.slice(-6).map((m) => ({
-        role: m.role,
-        content: m.content,
-      }));
-
       const response = await fetchAPI<ChatResponse>("/api/chat", {
         method: "POST",
-        body: JSON.stringify({ message: content, history }),
+        body: JSON.stringify({ message: question, history }),
+        signal: abortControllerRef.current.signal,
       });
 
-      const assistantMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: response.response,
-        intent: response.intent,
-        sources: response.sources,
-        questionRef: content,
-      };
-
-      setMessages((prev) => [...prev, assistantMessage]);
-    } catch (err) {
-      console.error("Chat error:", err);
-      setError("Không thể kết nối đến máy chủ. Vui lòng thử lại sau.");
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === assistantMsgId
+            ? {
+                ...m,
+                content: response.response,
+                status: "streaming", // TypingRenderer will pick this up
+                intent: response.intent,
+                sources: response.sources,
+              }
+            : m
+        )
+      );
+    } catch (err: any) {
+      if (err.status === 408 || (err instanceof DOMException && err.name === "AbortError")) {
+        // Silently handle manual aborts unless needed
+        return;
+      }
       
-      const errorMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: "Xin lỗi, đã xảy ra lỗi khi kết nối với hệ thống. Vui lòng thử lại.",
-      };
-      setMessages((prev) => [...prev, errorMessage]);
+      const apiErr = err as ApiError;
+      console.error("Chat error:", apiErr);
+      
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === assistantMsgId
+            ? {
+                ...m,
+                status: "error",
+                errorMessage: apiErr.message || "Lỗi kết nối máy chủ.",
+                content: "Xin lỗi, đã xảy ra lỗi khi kết nối với hệ thống. Vui lòng thử lại.",
+              }
+            : m
+        )
+      );
     } finally {
       setIsLoading(false);
+      abortControllerRef.current = null;
     }
+  };
+
+  const sendMessage = async (content: string) => {
+    const trimmed = content.trim();
+    if (!trimmed || isLoading) return;
+
+    // Rate limit: 800ms
+    const now = Date.now();
+    if (now - lastSubmitTimeRef.current < 800) return;
+    lastSubmitTimeRef.current = now;
+
+    // Length limit: 4000
+    if (trimmed.length > 4000) {
+      setError("Câu hỏi quá dài (tối đa 4000 ký tự).");
+      return;
+    }
+
+    const userMessage: ChatMessage = {
+      id: now.toString(),
+      role: "user",
+      content: trimmed,
+      status: "done",
+    };
+
+    const history = messages.slice(-6).map((m) => ({
+      role: m.role,
+      content: m.content,
+    }));
+
+    setMessages((prev) => [...prev, userMessage]);
+    await runChatRequest(trimmed, history);
   };
 
   const evaluateMessage = useCallback(async (messageId: string) => {
     const msg = messages.find((m) => m.id === messageId);
-    if (!msg || msg.role !== "assistant" || !msg.questionRef) return;
+    if (!msg || msg.role !== "assistant" || !msg.questionRef || msg.status !== "done") return;
 
-    // Mark as loading
     setMessages((prev) =>
       prev.map((m) => (m.id === messageId ? { ...m, evalLoading: true } : m))
     );
@@ -110,47 +169,23 @@ export function useChat() {
     const msg = messages.find((m) => m.id === messageId);
     if (!msg || msg.role !== "assistant" || !msg.questionRef) return;
 
-    // Remove the old assistant message
-    setMessages((prev) => prev.filter((m) => m.id !== messageId));
+    const history = messages
+      .filter((m) => m.id !== messageId)
+      .slice(-6)
+      .map((m) => ({ role: m.role, content: m.content }));
 
-    // Re-send the original question
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const history = messages
-        .filter((m) => m.id !== messageId)
-        .slice(-6)
-        .map((m) => ({ role: m.role, content: m.content }));
-
-      const response = await fetchAPI<ChatResponse>("/api/chat", {
-        method: "POST",
-        body: JSON.stringify({ message: msg.questionRef, history }),
-      });
-
-      const newMessage: ChatMessage = {
-        id: Date.now().toString(),
-        role: "assistant",
-        content: response.response,
-        intent: response.intent,
-        sources: response.sources,
-        questionRef: msg.questionRef,
-      };
-
-      setMessages((prev) => [...prev, newMessage]);
-    } catch (err) {
-      console.error("Retry error:", err);
-      setError("Không thể kết nối. Vui lòng thử lại.");
-      const errorMessage: ChatMessage = {
-        id: Date.now().toString(),
-        role: "assistant",
-        content: "Xin lỗi, đã xảy ra lỗi khi thử lại. Vui lòng thử lại sau.",
-      };
-      setMessages((prev) => [...prev, errorMessage]);
-    } finally {
-      setIsLoading(false);
-    }
+    await runChatRequest(msg.questionRef, history);
   }, [messages]);
+
+  const clearChat = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setMessages([]);
+    setError(null);
+    setIsLoading(false);
+  }, []);
 
   return {
     messages,
@@ -159,5 +194,7 @@ export function useChat() {
     sendMessage,
     evaluateMessage,
     retryMessage,
+    clearChat,
+    setMessages, // For TypingRenderer completion
   };
 }

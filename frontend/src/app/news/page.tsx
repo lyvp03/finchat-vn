@@ -8,8 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { ArrowUpRight, ArrowDownRight, Minus, Search, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Loader2, ChevronLeft, ChevronRight, Search, ArrowUpRight, ArrowDownRight, Minus } from "lucide-react";
 import Link from "next/link";
+import { getCached, setCached } from "@/lib/cache";
+import { useRef } from "react";
 
 export default function NewsPage() {
   const [articles, setArticles] = useState<NewsArticle[]>([]);
@@ -19,7 +21,17 @@ export default function NewsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 10;
 
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const seqIdRef = useRef(0);
+
   const loadNews = async (searchQuery = "", marketScope = "all") => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    const currentSeq = ++seqIdRef.current;
+
     setIsLoading(true);
     try {
       let endpoint = "";
@@ -31,15 +43,32 @@ export default function NewsPage() {
         if (marketScope !== "all") endpoint += `&market_scope=${marketScope}`;
       }
       
-      const res = await fetchAPI<LatestNewsResponse>(endpoint);
+      const cached = getCached<LatestNewsResponse>(endpoint);
+      if (cached) {
+        if (currentSeq === seqIdRef.current && cached.ok && cached.articles) {
+          setArticles(cached.articles);
+          setCurrentPage(1);
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      const res = await fetchAPI<LatestNewsResponse>(endpoint, { signal: controller.signal });
+      
+      if (currentSeq !== seqIdRef.current) return;
+
       if (res.ok && res.articles) {
+        setCached(endpoint, res, 60000); // Cache for 60s
         setArticles(res.articles);
         setCurrentPage(1);
       }
-    } catch (err) {
+    } catch (err: any) {
+      if (err.status === 408 || err.name === "AbortError") return;
       console.error("Failed to load news:", err);
     } finally {
-      setIsLoading(false);
+      if (currentSeq === seqIdRef.current) {
+        setIsLoading(false);
+      }
     }
   };
 

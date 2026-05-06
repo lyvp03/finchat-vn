@@ -10,6 +10,8 @@ import { DashboardToolbar, DashboardMode, TimeRange, AVAILABLE_ASSETS } from "@/
 import { MarketOverviewTable } from "@/components/dashboard/market-overview-table";
 import { fetchAPI } from "@/lib/api";
 import { LatestPriceResponse, PriceHistoryResponse, LatestNewsResponse, PriceTimeseriesResponse, PriceTimeseriesPoint, NewsSummaryResponse } from "@/lib/types";
+import { getCached, setCached } from "@/lib/cache";
+import { useRef } from "react";
 
 export default function DashboardPage() {
   const [mode, setMode] = useState<DashboardMode>("single");
@@ -24,8 +26,21 @@ export default function DashboardPage() {
   const [newsSummary, setNewsSummary] = useState<NewsSummaryResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const seqIdRef = useRef(0);
+
   useEffect(() => {
     async function loadData() {
+      // Cancel previous request if any
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
+      // Ensure only the latest request updates state
+      const currentSeq = ++seqIdRef.current;
+      
       setIsLoading(true);
       const days = timeRange === "7D" ? 7 : timeRange === "30D" ? 30 : timeRange === "90D" ? 90 : 180;
 
@@ -33,21 +48,37 @@ export default function DashboardPage() {
         ? [primaryAsset, ...compareAssets.filter(a => a !== primaryAsset)]
         : [primaryAsset];
 
+      const fetchWithCache = async <T,>(url: string, ttl: number): Promise<{ status: "fulfilled"; value: T } | { status: "rejected"; reason: any }> => {
+        const cached = getCached<T>(url);
+        if (cached) return { status: "fulfilled", value: cached };
+        
+        try {
+          const data = await fetchAPI<T>(url, { signal: controller.signal });
+          setCached(url, data, ttl);
+          return { status: "fulfilled", value: data };
+        } catch (error) {
+          return { status: "rejected", reason: error };
+        }
+      };
+
       const historyPromises = targetAssets.map(asset =>
-        fetchAPI<PriceHistoryResponse>(`/api/price/history?type=${asset}&days=${days}`)
+        fetchWithCache<PriceHistoryResponse>(`/api/price/history?type=${asset}&days=${days}`, 60000)
       );
 
       const timeseriesPromises = targetAssets.map(asset =>
-        fetchAPI<PriceTimeseriesResponse>(`/api/price/timeseries?type=${asset}&days=${days}`)
+        fetchWithCache<PriceTimeseriesResponse>(`/api/price/timeseries?type=${asset}&days=${days}`, 60000)
       );
 
-      const [latestRes, newsRes, summaryRes, ...results] = await Promise.allSettled([
-        fetchAPI<LatestPriceResponse>(`/api/price/latest`),
-        fetchAPI<LatestNewsResponse>("/api/news/latest?limit=5"),
-        fetchAPI<NewsSummaryResponse>(`/api/news/summary?days=7`),
+      const [latestRes, newsRes, summaryRes, ...results] = await Promise.all([
+        fetchWithCache<LatestPriceResponse>(`/api/price/latest`, 15000),
+        fetchWithCache<LatestNewsResponse>("/api/news/latest?limit=5", 60000),
+        fetchWithCache<NewsSummaryResponse>(`/api/news/summary?days=7`, 60000),
         ...historyPromises,
         ...timeseriesPromises
       ]);
+
+      // If a newer request was started, ignore these results
+      if (currentSeq !== seqIdRef.current) return;
 
       if (latestRes.status === "fulfilled") setLatestPrice(latestRes.value);
       if (newsRes.status === "fulfilled") setLatestNews(newsRes.value);
@@ -57,8 +88,8 @@ export default function DashboardPage() {
       const timeseriesResults = results.slice(targetAssets.length);
 
       const validHistories = historyResults
-        .filter((r): r is PromiseFulfilledResult<PriceHistoryResponse> => r.status === "fulfilled" && r.value.ok)
-        .map(r => r.value);
+        .filter((r): r is { status: "fulfilled"; value: PriceHistoryResponse } => r.status === "fulfilled" && r.value.ok)
+        .map(r => (r as { status: "fulfilled"; value: PriceHistoryResponse }).value);
 
       const newTimeseries: Record<string, PriceTimeseriesPoint[]> = {};
       timeseriesResults.forEach((r) => {
@@ -75,9 +106,15 @@ export default function DashboardPage() {
       setIsLoading(false);
     }
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadData();
+
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, [primaryAsset, compareAssets, mode, timeRange]);
+
 
   const primaryPriceData = latestPrice?.ok
     ? latestPrice.prices.find(p => p.type_code === primaryAsset) || latestPrice.prices[0]
