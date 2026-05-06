@@ -99,7 +99,7 @@ export function ChatMessages({
       <div className="space-y-4 pb-4">
         {messages.map((message) => {
           const isAssistant = message.role === "assistant";
-          const hasFinishedTyping = typingDone.has(message.id);
+          const hasFinishedTyping = message.status === "done" || message.status === "error" || typingDone.has(message.id);
 
           return (
             <div
@@ -126,6 +126,12 @@ export function ChatMessages({
                 >
                   {!isAssistant ? (
                     <div className="whitespace-pre-wrap text-[15px]">{message.content}</div>
+                  ) : message.status === "error" ? (
+                    <div className="text-destructive text-[15px] whitespace-pre-wrap">
+                      {message.errorMessage || message.content}
+                    </div>
+                  ) : message.status === "pending" ? (
+                    <div className="text-muted-foreground italic text-sm">Đang phân tích...</div>
                   ) : (
                     <TypingRenderer
                       content={message.content}
@@ -143,13 +149,13 @@ export function ChatMessages({
                   )}
                 </div>
 
-                {/* Actions + Eval — only show after typing finishes */}
+                {/* Actions + Eval — only show after typing finishes or on error */}
                 {isAssistant && hasFinishedTyping && (
                   <div className="animate-in fade-in duration-300">
                     <MessageActions
                       content={message.content}
                       onRetry={onRetry ? () => onRetry(message.id) : undefined}
-                      onFollowUp={onFollowUp}
+                      onFollowUp={message.status !== "error" ? onFollowUp : undefined}
                     />
                     {message.questionRef && (
                       <EvalScoreCard

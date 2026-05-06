@@ -45,4 +45,30 @@ def get_llm_client() -> BaseLLMClient:
             temperature=settings.LLM_TEMPERATURE,
         )
 
+    if provider == "mimo":
+        from core.llm.openai_client import OpenAIClient
+        api_key = _require_env(settings.MIMO_API_KEY, "MIMO_API_KEY")
+        base_url = _require_env(settings.MIMO_BASE_URL, "MIMO_BASE_URL")
+        logger.info("Using Mimo provider (via OpenAIClient): model=%s", model)
+        return OpenAIClient(
+            api_key=api_key,
+            model=model,
+            base_url=base_url,
+            temperature=settings.LLM_TEMPERATURE,
+            timeout=settings.LLM_TIMEOUT_SECONDS,
+        )
+
+    if provider == "gpt-mini":
+        from core.llm.openai_client import OpenAIClient
+        api_key = _require_env(settings.GPT_MINI_API_KEY, "GPT_MINI_API_KEY")
+        base_url = _require_env(settings.GPT_MINI_BASE_URL, "GPT_MINI_BASE_URL")
+        logger.info("Using GPT-Mini provider (via OpenAIClient): model=%s", model)
+        return OpenAIClient(
+            api_key=api_key,
+            model=model,
+            base_url=base_url,
+            temperature=settings.LLM_TEMPERATURE,
+            timeout=settings.LLM_TIMEOUT_SECONDS,
+        )
+
     raise ValueError(f"Unsupported LLM_PROVIDER: {provider}")

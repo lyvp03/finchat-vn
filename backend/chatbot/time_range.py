@@ -38,6 +38,31 @@ def extract_time_range(question: str, now: datetime | None = None) -> TimeRange:
     now = now or datetime.now()
     text = normalize_text(question)
 
+    # 1. Look for absolute dates like 27/4, 27/04, 27/4/2026, or "ngay 27 thang 4"
+    date_match = re.search(r"\b(\d{1,2})[/-](\d{1,2})(?:[/-](\d{4}))?\b", text)
+    if not date_match:
+        date_match = re.search(r"ngay (\d{1,2}) thang (\d{1,2})(?: nam (\d{4}))?", text)
+        
+    if date_match:
+        day = int(date_match.group(1))
+        month = int(date_match.group(2))
+        year = int(date_match.group(3)) if date_match.group(3) else now.year
+        
+        try:
+            start_date = datetime(year, month, day)
+            if start_date > now:
+                start_date = start_date.replace(year=year - 1)
+                
+            period_days = max(1, (now - start_date).days)
+            return TimeRange(
+                type="rolling_period",
+                start=start_date,
+                end=now,
+                period_days=period_days,
+            )
+        except ValueError:
+            pass # Invalid date string, ignore and fall through
+
     if "so voi thang truoc" in text or "thang truoc" in text:
         current_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         previous_end = current_start - timedelta(microseconds=1)
