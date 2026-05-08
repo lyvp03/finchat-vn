@@ -1,6 +1,9 @@
 """Embedding wrapper for gold news RAG — OpenAI-compatible API."""
 import logging
+import time
 from typing import Iterable, List
+
+from tenacity import retry, stop_after_attempt, wait_random_exponential, retry_if_exception_type
 
 import httpx
 
@@ -43,9 +46,13 @@ class GeminiEmbedder:
     def dimension(self) -> int:
         return self._dimension
 
+    @retry(
+        retry=retry_if_exception_type(httpx.HTTPStatusError),
+        wait=wait_random_exponential(min=2, max=60),
+        stop=stop_after_attempt(10),
+    )
     def _call_api(self, texts: list[str]) -> list[list[float]]:
         """Single API call for a batch of texts using Gemini."""
-        import time
         # Gemini Free Tier limit is very strict (15 RPM). 
         # We wait 4 seconds before/after every batch to stay safe.
         time.sleep(4.2)
