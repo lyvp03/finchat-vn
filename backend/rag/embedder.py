@@ -31,12 +31,17 @@ class GeminiEmbedder:
         if not texts:
             return []
 
+        import time
         all_vectors: List[List[float]] = []
         # Gemini batchEmbedContents max requests is 100
         for start in range(0, len(texts), _MAX_BATCH):
             batch = texts[start : start + _MAX_BATCH]
             vectors = self._call_api(batch)
             all_vectors.extend(vectors)
+            
+            # Rate limit for Gemini Free Tier is 15 RPM (~1 request every 4 seconds)
+            if start + _MAX_BATCH < len(texts):
+                time.sleep(4.5)
 
         return all_vectors
 
