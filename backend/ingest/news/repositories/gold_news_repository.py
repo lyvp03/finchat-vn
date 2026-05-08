@@ -134,7 +134,7 @@ class GoldNewsRepository:
                        content_hash, title_hash, is_duplicate, quality_score, is_relevant,
                        market_scope, raw_payload, extra_metadata
                 FROM gold_news FINAL
-                WHERE sentiment_score = 0
+                WHERE sentiment_score = 0.0
                 ORDER BY published_at DESC
                 LIMIT {limit}
             """
