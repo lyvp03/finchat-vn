@@ -26,8 +26,9 @@ jobs:
       CLICKHOUSE_DATABASE: ${{ secrets.CLICKHOUSE_DATABASE }}
       HF_TOKEN: ${{ secrets.HF_TOKEN }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      GPT_MINI_API_KEY: ${{ secrets.GPT_MINI_API_KEY }}
-      GPT_MINI_BASE_URL: ${{ secrets.GPT_MINI_BASE_URL }}
+      MIMO_API_KEY: ${{ secrets.MIMO_API_KEY }}
+      MIMO_BASE_URL: ${{ secrets.MIMO_BASE_URL }}
+      GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
 
     steps:
       - uses: actions/checkout@v4

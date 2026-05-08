@@ -34,10 +34,10 @@ News ({language}): {text[:500]}"""
 
     try:
         response = httpx.post(
-            f"{settings.GPT_MINI_BASE_URL}/v1/chat/completions",
-            headers={"Authorization": f"Bearer {settings.GPT_MINI_API_KEY}"},
+            f"{settings.MIMO_BASE_URL}/chat/completions",
+            headers={"Authorization": f"Bearer {settings.MIMO_API_KEY}"},
             json={
-                "model": "GPT-5-mini",
+                "model": "mimo-v2.5-pro",
                 "messages": [{"role": "user", "content": prompt}],
                 "temperature": 1,
                 "max_tokens": 1000,
