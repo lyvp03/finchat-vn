@@ -53,6 +53,7 @@ jobs:
           EMBEDDING_MODEL: ${{ secrets.EMBEDDING_MODEL }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          GOOGLE_API_KEYS: ${{ secrets.GOOGLE_API_KEYS }}
         run: |
           python -c "
           from jobs.worker.main import job_index_news
