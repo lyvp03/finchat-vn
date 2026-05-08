@@ -6,7 +6,7 @@ from typing import Any, Optional
 
 from core.config import settings
 from rag.chunker import NewsChunk
-from rag.embedder import SentenceTransformerEmbedder
+from rag.embedder import OpenAIEmbedder
 
 logger = logging.getLogger("qdrant_store")
 
@@ -17,12 +17,12 @@ class QdrantNewsVectorStore:
         url: str | None = None,
         api_key: str | None = None,
         collection_name: str | None = None,
-        embedder: SentenceTransformerEmbedder | None = None,
+        embedder: OpenAIEmbedder | None = None,
     ):
         self.url = url or settings.QDRANT_URL
         self.api_key = api_key or settings.QDRANT_API_KEY
         self.collection_name = collection_name or settings.QDRANT_COLLECTION
-        self.embedder = embedder or SentenceTransformerEmbedder()
+        self.embedder = embedder or OpenAIEmbedder()
         self._client = None
 
         if not self.url:
