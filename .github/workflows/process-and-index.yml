@@ -32,6 +32,8 @@ jobs:
           CLICKHOUSE_USER: ${{ secrets.CLICKHOUSE_USER }}
           CLICKHOUSE_PASSWORD: ${{ secrets.CLICKHOUSE_PASSWORD }}
           CLICKHOUSE_DATABASE: ${{ secrets.CLICKHOUSE_DATABASE }}
+          GPT_MINI_API_KEY: ${{ secrets.GPT_MINI_API_KEY }}
+          GPT_MINI_BASE_URL: ${{ secrets.GPT_MINI_BASE_URL }}
         run: |
           python -c "
           from jobs.worker.main import job_preprocess_news
@@ -49,6 +51,7 @@ jobs:
           QDRANT_API_KEY: ${{ secrets.QDRANT_API_KEY }}
           QDRANT_COLLECTION: ${{ secrets.QDRANT_COLLECTION }}
           EMBEDDING_MODEL: ${{ secrets.EMBEDDING_MODEL }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           python -c "
           from jobs.worker.main import job_index_news

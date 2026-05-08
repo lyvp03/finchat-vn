@@ -88,25 +88,25 @@ def grade_evidence(context: Dict[str, Any]) -> EvidenceGrade:
         available.append("contextual_news")
 
     # --- Apply grading rules ---
-    has_market_trio = all(
-        s in available for s in ("domestic_price", "xauusd", "usd_vnd")
+    has_price_and_xauusd = (
+        "domestic_price" in available and "xauusd" in available
     )
 
-    if has_market_trio and has_direct:
+    if has_price_and_xauusd and has_direct:
         grade = EvidenceGrade(
             can_explain_cause=True,
             confidence="high",
             available_data=available,
             missing_data=missing,
-            reason="Full evidence: domestic price, world market, and direct news available.",
+            reason="Full evidence: domestic price, XAUUSD, and direct news available.",
         )
-    elif has_market_trio:
+    elif has_price_and_xauusd:
         grade = EvidenceGrade(
             can_explain_cause=True,
             confidence="medium",
             available_data=available,
             missing_data=missing,
-            reason="Market correlation available (SJC + XAUUSD + USDVND), but no direct news.",
+            reason="Market correlation available (SJC + XAUUSD), but no direct news. USDVND is optional.",
         )
     elif "domestic_price" in available and (has_contextual or has_direct):
         grade = EvidenceGrade(
@@ -114,7 +114,7 @@ def grade_evidence(context: Dict[str, Any]) -> EvidenceGrade:
             confidence="low",
             available_data=available,
             missing_data=missing,
-            reason="Only domestic price and contextual/direct news. Missing world market data for causal analysis.",
+            reason="Only domestic price and contextual/direct news. Missing XAUUSD for causal analysis.",
         )
     elif "domestic_price" in available:
         grade = EvidenceGrade(

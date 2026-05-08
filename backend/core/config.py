@@ -1,4 +1,5 @@
 import os
+# pyrefly: ignore [missing-import]
 from dotenv import load_dotenv
 
 # Tải biến môi trường từ .env (cùng cấp với backend/)
@@ -48,6 +49,13 @@ class Settings:
     GPT_MINI_API_KEY = _env("GPT_MINI_API_KEY")
     GPT_MINI_BASE_URL = _env("GPT_MINI_BASE_URL")
 
+    # --- OpenAI Embedding ---
+    OPENAI_API_KEY = _env("OPENAI_API_KEY")
+    OPENAI_EMBEDDING_BASE_URL = os.getenv(
+        "OPENAI_EMBEDDING_BASE_URL",
+        "https://aiportalapi.stu-platform.live/jpe"
+    )
+
     # --- RAG / Vector DB ---
     VECTOR_STORE = os.getenv("VECTOR_STORE", "qdrant").lower()
     CHROMA_PERSIST_DIR = os.getenv("CHROMA_PERSIST_DIR", "./chroma_db")
@@ -57,15 +65,15 @@ class Settings:
     QDRANT_TIMEOUT_SECONDS = int(os.getenv("QDRANT_TIMEOUT_SECONDS", "30"))
     QDRANT_UPSERT_BATCH_SIZE = int(os.getenv("QDRANT_UPSERT_BATCH_SIZE", "64"))
     QDRANT_TRUST_ENV = os.getenv("QDRANT_TRUST_ENV", "false").lower() in ("1", "true", "yes")
-    EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
-    RAG_TOP_K = int(os.getenv("RAG_TOP_K", "8"))
-    RAG_CANDIDATE_K = int(os.getenv("RAG_CANDIDATE_K", "24"))
-    RAG_SHORT_ARTICLE_TOKENS = int(os.getenv("RAG_SHORT_ARTICLE_TOKENS", "450"))
-    RAG_MAX_CHUNK_TOKENS = int(os.getenv("RAG_MAX_CHUNK_TOKENS", "320"))
+    EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
+    RAG_TOP_K = int(os.getenv("RAG_TOP_K", "10"))
+    RAG_CANDIDATE_K = int(os.getenv("RAG_CANDIDATE_K", "30"))
+    RAG_SHORT_ARTICLE_TOKENS = int(os.getenv("RAG_SHORT_ARTICLE_TOKENS", "600"))
+    RAG_MAX_CHUNK_TOKENS = int(os.getenv("RAG_MAX_CHUNK_TOKENS", "400"))
     RAG_MIN_CHUNK_TOKENS = int(os.getenv("RAG_MIN_CHUNK_TOKENS", "80"))
     RAG_CHUNK_OVERLAP_PARAGRAPHS = int(os.getenv("RAG_CHUNK_OVERLAP_PARAGRAPHS", "1"))
     # Context compressor: bao nhiêu bài / chars đưa vào LLM
-    RAG_CONTEXT_TOP_N = int(os.getenv("RAG_CONTEXT_TOP_N", "3"))
-    RAG_CONTEXT_MAX_CHARS = int(os.getenv("RAG_CONTEXT_MAX_CHARS", "500"))
+    RAG_CONTEXT_TOP_N = int(os.getenv("RAG_CONTEXT_TOP_N", "8"))
+    RAG_CONTEXT_MAX_CHARS = int(os.getenv("RAG_CONTEXT_MAX_CHARS", "800"))
 
 settings = Settings()

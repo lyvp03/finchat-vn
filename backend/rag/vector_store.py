@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 
 from core.config import settings
 from rag.chunker import NewsChunk, chunk_article
-from rag.embedder import SentenceTransformerEmbedder, article_to_embedding_text
+from rag.embedder import OpenAIEmbedder, article_to_embedding_text
 
 
 class GoldNewsVectorStore:
@@ -13,17 +13,19 @@ class GoldNewsVectorStore:
         self,
         persist_dir: str | None = None,
         collection_name: str = "gold_news",
-        embedder: SentenceTransformerEmbedder | None = None,
+        embedder: OpenAIEmbedder | None = None,
     ):
         self.persist_dir = persist_dir or settings.CHROMA_PERSIST_DIR
         self.collection_name = collection_name
-        self.embedder = embedder or SentenceTransformerEmbedder()
+        self.embedder = embedder or OpenAIEmbedder()
         self._collection = None
 
     @property
     def collection(self):
         if self._collection is None:
             try:
+                
+                # pyrefly: ignore [missing-import]
                 import chromadb
             except ImportError as exc:
                 raise RuntimeError("chromadb is not installed. Install backend requirements first.") from exc

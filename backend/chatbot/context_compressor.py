@@ -58,9 +58,12 @@ def compact_news_context(
         score = article.get("score")
         score_str = f"{score:.3f}" if score is not None else "N/A"
 
+        source_url = article.get("source_url", "")
+        url_line = f" | Link: {source_url}" if source_url else ""
+
         block = (
             f"[{i}] {article.get('title', 'N/A')}\n"
-            f"Nguồn: {article.get('source_name', 'N/A')} | "
+            f"Nguồn: {article.get('source_name', 'N/A')}{url_line} | "
             f"Ngày: {published} | "
             f"Event: {article.get('event_type', 'N/A')} | "
             f"Impact: {article.get('impact_score', 0):.2f} | "

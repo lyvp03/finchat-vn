@@ -2,6 +2,12 @@
 News enrichment orchestrator.
 Đọc bài từ DB → chạy pipeline enrichment → ghi lại DB.
 
+Strategy:
+  1. Quality score + symbol/tag/entity extraction → rule-based (fast, reliable)
+  2. Sentiment + relevance + impact + event_type + market_scope + news_tier
+     → LLM (GPT-5-mini) with detailed rubrics
+     → fallback to rule-based heuristics if LLM fails
+
 Idempotent: chạy lại nhiều lần không tạo data sai.
 """
 import logging
@@ -12,6 +18,8 @@ from core.config import settings
 from core.db import get_clickhouse_client
 from ingest.news.models import NewsArticle
 from ingest.news.repositories.gold_news_repository import GoldNewsRepository
+
+# Rule-based functions (used for quality/extraction + LLM fallback)
 from utils.news_processing import (
     clean_text,
     compute_quality_score,
@@ -24,61 +32,113 @@ from utils.news_processing import (
     compute_impact_score,
     classify_news_tier,
 )
+
+# LLM-based unified analyzer (primary for scoring/classification)
+from ml.news_analyzer import analyze_article
+
+# Legacy sentiment (only used as part of fallback)
 from ml.sentiment import score_sentiment
 
 logger = logging.getLogger("news_enrichment")
 
 
-def enrich_article(article: NewsArticle) -> NewsArticle:
+def _apply_llm_analysis(article: NewsArticle) -> bool:
+    """Try LLM analysis. Returns True if successful, False → use fallback."""
+    result = analyze_article(
+        title=article.title,
+        content=f"{article.summary or ''} {article.content or ''}",
+        source_name=article.source_name,
+        language=article.language,
+    )
+    if result is None:
+        return False
+
+    article.sentiment_score = result.sentiment_score
+    article.relevance_score = result.relevance_score
+    article.impact_score = result.impact_score
+    article.event_type = result.event_type
+    article.market_scope = result.market_scope
+    article.news_tier = result.news_tier
+    return True
+
+
+def _apply_rule_based_fallback(article: NewsArticle) -> None:
+    """Fallback: use original rule-based heuristics for all scoring fields."""
+    article.relevance_score = compute_relevance_score(article)
+    article.market_scope = classify_market_scope(article)
+    article.event_type = classify_event_type(article)
+
+    text_for_sentiment = f"{article.title}. {article.summary or ''}"[:500]
+    article.sentiment_score = score_sentiment(text_for_sentiment, language=article.language)
+
+    article.impact_score = compute_impact_score(article)
+    article.news_tier = classify_news_tier(article)
+
+
+def enrich_article(article: NewsArticle) -> tuple[NewsArticle, bool]:
     """Chạy toàn bộ pipeline enrichment trên 1 bài."""
-    # Phase 1: Clean text (chỉ clean 1 lần)
+    # ── Phase 1: Clean text ──
     article.title = clean_text(article.title)
     article.summary = clean_text(article.summary)
     article.content = clean_text(article.content)
 
-    # Phase 2: Recompute hashes (sau clean)
+    # ── Phase 2: Recompute hashes ──
     article.generate_hashes()
 
-    # Phase 3-4: Quality + Relevance
+    # ── Phase 3: Quality score (always rule-based — metadata check) ──
     article.quality_score = compute_quality_score(article)
-    article.relevance_score = compute_relevance_score(article)
-    article.is_relevant = article.relevance_score >= settings.NEWS_RELEVANCE_THRESHOLD
 
-    # Phase 5: Market scope
-    article.market_scope = classify_market_scope(article)
-
-    # Phase 6: Symbols → Tags → Entities (symbols truyền vào tags để tránh tính 2 lần)
+    # ── Phase 4: Symbols → Tags → Entities (always rule-based — dict lookup) ──
     article.symbols = extract_symbols(article)
     article.tags = extract_tags(article, symbols=article.symbols)
     article.entities = extract_entities(article)
 
-    # Phase 7: Event type (dùng tags + symbols đã có)
-    article.event_type = classify_event_type(article)
+    # ── Phase 5: LLM analysis (sentiment + relevance + impact + event_type + scope + tier) ──
+    llm_ok = _apply_llm_analysis(article)
+    if not llm_ok:
+        logger.warning("LLM unavailable for article %s — using rule-based fallback", article.id[:12])
+        _apply_rule_based_fallback(article)
 
-    # Phase 8: Sentiment (gold-adjusted)
-    text_for_sentiment = f"{article.title}. {article.summary or ''}"[:512]
-    article.sentiment_score = score_sentiment(text_for_sentiment, language=article.language)
-
-    # Phase 9: Impact (dùng event_type + relevance + quality)
-    article.impact_score = compute_impact_score(article)
-
-    # Phase 10: News tier (direct / contextual / weak)
-    article.news_tier = classify_news_tier(article)
+    # ── Phase 6: Derived fields ──
+    article.is_relevant = article.relevance_score >= settings.NEWS_RELEVANCE_THRESHOLD
 
     # Mark updated
     article.updated_at = datetime.now()
-    return article
+    return article, llm_ok
 
 
 def enrich_batch(articles: List[NewsArticle]) -> List[NewsArticle]:
     """Enrich một batch bài viết."""
     enriched = []
-    for i, article in enumerate(articles):
+    llm_count = 0
+    fallback_count = 0
+    error_count = 0
+    
+    total = len(articles)
+    for i, article in enumerate(articles, 1):
         try:
-            enriched.append(enrich_article(article))
+            result, used_llm = enrich_article(article)
+            if used_llm:
+                llm_count += 1
+            else:
+                fallback_count += 1
+                
+            enriched.append(result)
+            
+            # Log progress every 50 articles
+            if i % 50 == 0 or i == total:
+                logger.info("Progress: %d/%d articles processed (LLM: %d, Fallback: %d, Errors: %d)",
+                            i, total, llm_count, fallback_count, error_count)
+                            
         except Exception as e:
-            logger.warning(f"Failed to enrich article {article.id}: {e}")
+            error_count += 1
+            logger.error("Failed to enrich article %s: %s", article.id[:12], e)
             enriched.append(article)  # giữ nguyên bài lỗi
+
+    logger.info(
+        "Batch enrichment FINISHED. Total: %d | LLM Success: %d | Fallbacks: %d | Errors: %d",
+        total, llm_count, fallback_count, error_count
+    )
     return enriched
 
 

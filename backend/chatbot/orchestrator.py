@@ -82,9 +82,8 @@ def answer_question(
         logger.warning("[FLOW] NO DATA → skipping LLM, returning error response")
         return {
             "response": (
-                "Hiện chưa truy vấn được dữ liệu để trả lời chính xác.\n"
-                f"Lỗi: {'; '.join(context['errors'])}\n"
-                "Vui lòng kiểm tra ClickHouse / Qdrant / Ollama."
+                "Xin lỗi, hiện tại hệ thống chưa truy vấn được dữ liệu.\n"
+                "Vui lòng thử lại sau hoặc đặt câu hỏi khác."
             ),
             "intent": intent,
             "sources": context,
