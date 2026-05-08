@@ -29,6 +29,7 @@ jobs:
       MIMO_API_KEY: ${{ secrets.MIMO_API_KEY }}
       MIMO_BASE_URL: ${{ secrets.MIMO_BASE_URL }}
       GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+      GOOGLE_API_KEYS: ${{ secrets.GOOGLE_API_KEYS }}
 
     steps:
       - uses: actions/checkout@v4

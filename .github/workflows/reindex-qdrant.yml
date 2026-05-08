@@ -38,6 +38,7 @@ jobs:
           QDRANT_API_KEY: ${{ secrets.QDRANT_API_KEY }}
           QDRANT_COLLECTION: ${{ secrets.QDRANT_COLLECTION }}
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          GOOGLE_API_KEYS: ${{ secrets.GOOGLE_API_KEYS }}
           EMBEDDING_MODEL: gemini-embedding-2
         run: |
           echo "=== STARTING RE-INDEX (Limit: ${{ github.event.inputs.limit }}) ==="
