@@ -1,0 +1,50 @@
+name: Manual Re-index to Qdrant
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: 'Number of articles to index'
+        required: true
+        default: '2000'
+
+jobs:
+  reindex:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Re-index News to Qdrant Cloud
+        env:
+          CLICKHOUSE_HOST: ${{ secrets.CLICKHOUSE_HOST }}
+          CLICKHOUSE_PORT: ${{ secrets.CLICKHOUSE_PORT }}
+          CLICKHOUSE_USER: ${{ secrets.CLICKHOUSE_USER }}
+          CLICKHOUSE_PASSWORD: ${{ secrets.CLICKHOUSE_PASSWORD }}
+          CLICKHOUSE_DATABASE: ${{ secrets.CLICKHOUSE_DATABASE }}
+          QDRANT_URL: ${{ secrets.QDRANT_URL }}
+          QDRANT_API_KEY: ${{ secrets.QDRANT_API_KEY }}
+          QDRANT_COLLECTION: ${{ secrets.QDRANT_COLLECTION }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          EMBEDDING_MODEL: gemini-embedding-2
+        run: |
+          echo "=== STARTING RE-INDEX (Limit: ${{ github.event.inputs.limit }}) ==="
+          python -c "
+          from jobs.worker.main import job_index_news
+          import os
+          # Override limit if possible by monkey-patching or just running the internal function
+          from rag.indexer import run_indexing
+          run_indexing(limit=int('${{ github.event.inputs.limit }}'))
+          "
