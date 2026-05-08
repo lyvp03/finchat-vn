@@ -71,9 +71,40 @@ class QdrantNewsVectorStore:
 
         self._ensure_payload_indexes()
 
-    def upsert_chunks(self, chunks: list[NewsChunk]) -> int:
+    def get_existing_point_ids(self) -> set[str]:
+        """Scroll the entire collection and return all point IDs."""
+        self.ensure_collection()
+        ids: set[str] = set()
+        offset = None
+        while True:
+            results, next_offset = self.client.scroll(
+                collection_name=self.collection_name,
+                limit=256,
+                offset=offset,
+                with_payload=False,
+                with_vectors=False,
+            )
+            for point in results:
+                ids.add(str(point.id))
+            if next_offset is None:
+                break
+            offset = next_offset
+        logger.info("Found %d existing points in Qdrant.", len(ids))
+        return ids
+
+    def upsert_chunks(self, chunks: list[NewsChunk], skip_ids: set[str] | None = None) -> int:
         if not chunks:
             return 0
+
+        # Filter out already-indexed chunks
+        if skip_ids:
+            before = len(chunks)
+            chunks = [c for c in chunks if c.point_id not in skip_ids]
+            skipped = before - len(chunks)
+            if skipped:
+                logger.info("Skipping %d chunks already in Qdrant. %d new to index.", skipped, len(chunks))
+            if not chunks:
+                return 0
 
         self.ensure_collection()
         total = 0
@@ -85,6 +116,8 @@ class QdrantNewsVectorStore:
             points = [self._point_struct(chunk, vector) for chunk, vector in zip(batch, embeddings)]
             self.client.upsert(collection_name=self.collection_name, points=points)
             total += len(points)
+            logger.info("Upserted batch %d/%d (%d points).", start // batch_size + 1,
+                        (len(chunks) + batch_size - 1) // batch_size, len(points))
         return total
 
     def search(
