@@ -107,33 +107,44 @@ def enrich_article(article: NewsArticle) -> tuple[NewsArticle, bool]:
     return article, llm_ok
 
 
-def enrich_batch(articles: List[NewsArticle]) -> List[NewsArticle]:
-    """Enrich một batch bài viết."""
+import concurrent.futures
+
+def enrich_batch(articles: List[NewsArticle], max_workers: int = 10) -> List[NewsArticle]:
+    """Enrich một batch bài viết (chạy song song để tối ưu tốc độ)."""
     enriched = []
     llm_count = 0
     fallback_count = 0
     error_count = 0
     
     total = len(articles)
-    for i, article in enumerate(articles, 1):
+    
+    def process(article):
         try:
-            result, used_llm = enrich_article(article)
-            if used_llm:
+            return enrich_article(article), None
+        except Exception as e:
+            return (article, False), e
+
+    logger.info(f"Starting parallel enrichment with {max_workers} workers...")
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(process, article): article for article in articles}
+        
+        for i, future in enumerate(concurrent.futures.as_completed(futures), 1):
+            (result_article, used_llm), error = future.result()
+            
+            if error:
+                error_count += 1
+                logger.error("Failed to enrich article %s: %s", result_article.id[:12], error)
+            elif used_llm:
                 llm_count += 1
             else:
                 fallback_count += 1
                 
-            enriched.append(result)
+            enriched.append(result_article)
             
             # Log progress every 50 articles
             if i % 50 == 0 or i == total:
                 logger.info("Progress: %d/%d articles processed (LLM: %d, Fallback: %d, Errors: %d)",
                             i, total, llm_count, fallback_count, error_count)
-                            
-        except Exception as e:
-            error_count += 1
-            logger.error("Failed to enrich article %s: %s", article.id[:12], e)
-            enriched.append(article)  # giữ nguyên bài lỗi
 
     logger.info(
         "Batch enrichment FINISHED. Total: %d | LLM Success: %d | Fallbacks: %d | Errors: %d",
