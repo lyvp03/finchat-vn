@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 
 from core.config import settings
 from rag.chunker import NewsChunk, chunk_article
-from rag.embedder import OpenAIEmbedder, article_to_embedding_text
+from rag.embedder import GeminiEmbedder, article_to_embedding_text
 
 
 class GoldNewsVectorStore:
@@ -13,11 +13,11 @@ class GoldNewsVectorStore:
         self,
         persist_dir: str | None = None,
         collection_name: str = "gold_news",
-        embedder: OpenAIEmbedder | None = None,
+        embedder: GeminiEmbedder | None = None,
     ):
         self.persist_dir = persist_dir or settings.CHROMA_PERSIST_DIR
         self.collection_name = collection_name
-        self.embedder = embedder or OpenAIEmbedder()
+        self.embedder = embedder or GeminiEmbedder()
         self._collection = None
 
     @property

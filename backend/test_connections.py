@@ -16,19 +16,20 @@ print(f"GPT_MINI_API_KEY: {key2[:10]}...{key2[-4:]}" if key2 else "GPT_MINI_API_
 print(f"GPT_MINI_BASE_URL: {settings.GPT_MINI_BASE_URL}")
 print()
 
-# --- Test 1: OpenAI Embedding ---
-print("=== Test 1: OpenAI Embedding API ===")
+# --- Test 1: Gemini Embedding ---
+print("=== Test 1: Gemini Embedding API ===")
 try:
-    base = settings.OPENAI_EMBEDDING_BASE_URL.rstrip("/")
     r = httpx.post(
-        base + "/v1/embeddings",
-        headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}", "Content-Type": "application/json"},
-        json={"model": settings.EMBEDDING_MODEL, "input": ["test connection"]},
+        f"https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:batchEmbedContents?key={settings.GOOGLE_API_KEY}",
+        headers={"Content-Type": "application/json"},
+        json={
+            "requests": [{"model": "models/gemini-embedding-2", "content": {"parts": [{"text": "test connection"}]}}]
+        },
         timeout=15.0,
     )
     if r.status_code == 200:
         data = r.json()
-        dim = len(data["data"][0]["embedding"])
+        dim = len(data["embeddings"][0]["values"])
         print(f"  OK! Status: {r.status_code}, Dimension: {dim}")
     else:
         print(f"  FAIL! Status: {r.status_code}, Body: {r.text[:300]}")
@@ -37,14 +38,14 @@ except Exception as e:
 
 print()
 
-# --- Test 2: GPT-5-mini Sentiment ---
-print("=== Test 2: GPT-5-mini Sentiment API ===")
+# --- Test 2: MiMo v2.5 Pro Sentiment ---
+print("=== Test 2: MiMo v2.5 Pro Sentiment API ===")
 try:
     r = httpx.post(
-        settings.GPT_MINI_BASE_URL + "/v1/chat/completions",
-        headers={"Authorization": f"Bearer {settings.GPT_MINI_API_KEY}"},
+        settings.MIMO_BASE_URL + "/chat/completions",
+        headers={"Authorization": f"Bearer {settings.MIMO_API_KEY}"},
         json={
-            "model": "GPT-5-mini",
+            "model": "mimo-v2.5-pro",
             "messages": [{"role": "user", "content": "Say OK"}],
             "temperature": 1.0,
             "max_tokens": 5,

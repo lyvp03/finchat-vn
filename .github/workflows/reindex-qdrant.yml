@@ -1,13 +1,15 @@
-name: Preprocess & RAG Index
+name: Manual Re-index to Qdrant
 
 on:
-  schedule:
-    # 09:30, 18:30 VN time (UTC+7) — chạy sau khi price + news đã crawl xong
-    - cron: '30 2,11 * * *'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: 'Number of articles to index'
+        required: true
+        default: '2000'
 
 jobs:
-  process:
+  reindex:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -25,22 +27,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Preprocess news (NLP sentiment + enrichment)
-        env:
-          CLICKHOUSE_HOST: ${{ secrets.CLICKHOUSE_HOST }}
-          CLICKHOUSE_PORT: ${{ secrets.CLICKHOUSE_PORT }}
-          CLICKHOUSE_USER: ${{ secrets.CLICKHOUSE_USER }}
-          CLICKHOUSE_PASSWORD: ${{ secrets.CLICKHOUSE_PASSWORD }}
-          CLICKHOUSE_DATABASE: ${{ secrets.CLICKHOUSE_DATABASE }}
-          MIMO_API_KEY: ${{ secrets.MIMO_API_KEY }}
-          MIMO_BASE_URL: ${{ secrets.MIMO_BASE_URL }}
-        run: |
-          python -c "
-          from jobs.worker.main import job_preprocess_news
-          job_preprocess_news()
-          "
-
-      - name: Index to Qdrant Cloud
+      - name: Re-index News to Qdrant Cloud
         env:
           CLICKHOUSE_HOST: ${{ secrets.CLICKHOUSE_HOST }}
           CLICKHOUSE_PORT: ${{ secrets.CLICKHOUSE_PORT }}
@@ -50,11 +37,14 @@ jobs:
           QDRANT_URL: ${{ secrets.QDRANT_URL }}
           QDRANT_API_KEY: ${{ secrets.QDRANT_API_KEY }}
           QDRANT_COLLECTION: ${{ secrets.QDRANT_COLLECTION }}
-          EMBEDDING_MODEL: ${{ secrets.EMBEDDING_MODEL }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          EMBEDDING_MODEL: gemini-embedding-2
         run: |
+          echo "=== STARTING RE-INDEX (Limit: ${{ github.event.inputs.limit }}) ==="
           python -c "
           from jobs.worker.main import job_index_news
-          job_index_news()
+          import os
+          # Override limit if possible by monkey-patching or just running the internal function
+          from rag.indexer import run_indexing
+          run_indexing(limit=int('${{ github.event.inputs.limit }}'))
           "

@@ -166,7 +166,7 @@ def analyze_article(
     source_name: str = "",
     language: str = "vi",
 ) -> Optional[NewsAnalysis]:
-    """Call GPT-5-mini with detailed rubrics. Returns None on failure (caller uses fallback)."""
+    """Call MiMo-v2.5-pro with detailed rubrics. Returns None on failure (caller uses fallback)."""
     text = f"{title}. {content or ''}"
     if not text or len(text.strip()) < 10:
         return None
@@ -180,10 +180,10 @@ def analyze_article(
 
     try:
         response = httpx.post(
-            f"{settings.GPT_MINI_BASE_URL}/v1/chat/completions",
-            headers={"Authorization": f"Bearer {settings.GPT_MINI_API_KEY}"},
+            f"{settings.MIMO_BASE_URL}/chat/completions",
+            headers={"Authorization": f"Bearer {settings.MIMO_API_KEY}"},
             json={
-                "model": "GPT-5-mini",
+                "model": "mimo-v2.5-pro",
                 "messages": [
                     {"role": "system", "content": _SYSTEM_PROMPT},
                     {"role": "user", "content": user_prompt},
