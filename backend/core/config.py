@@ -44,6 +44,9 @@ class Settings:
     OLLAMA_BASE_URL = _env("OLLAMA_BASE_URL")
     OLLAMA_API_KEY = _env("OLLAMA_API_KEY")
     GOOGLE_API_KEY = _env("GOOGLE_API_KEY")
+    GOOGLE_API_KEYS: list[str] = [
+        k.strip() for k in os.getenv("GOOGLE_API_KEYS", "").split(",") if k.strip()
+    ]
     MIMO_API_KEY = _env("MIMO_API_KEY")
     MIMO_BASE_URL = _env("MIMO_BASE_URL")
     GPT_MINI_API_KEY = _env("GPT_MINI_API_KEY")
