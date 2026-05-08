@@ -32,6 +32,7 @@ def run_indexing(limit: int = 1000) -> dict:
             "articles_skipped": 0,
             "chunks_created": 0,
             "chunks_indexed": 0,
+            "chunks_skipped": 0,
             "collection_count": 0,
         }
 
@@ -44,10 +45,19 @@ def run_indexing(limit: int = 1000) -> dict:
             chunks.extend(article_chunks)
 
     store = get_news_vector_store()
-    indexed = store.upsert_chunks(chunks)
+
+    # Incremental: fetch existing IDs so we only embed new chunks
+    existing_ids = store.get_existing_point_ids()
+    new_count = sum(1 for c in chunks if c.point_id not in existing_ids)
+    logger.info(
+        "Chunks: %d total, %d new, %d already indexed.",
+        len(chunks), new_count, len(chunks) - new_count,
+    )
+
+    indexed = store.upsert_chunks(chunks, skip_ids=existing_ids)
     count = store.count()
     logger.info(
-        "Indexed %s chunks from %s articles into %s. Collection count=%s",
+        "Indexed %s new chunks from %s articles into %s. Collection count=%s",
         indexed,
         articles_indexed,
         settings.VECTOR_STORE,
@@ -60,5 +70,6 @@ def run_indexing(limit: int = 1000) -> dict:
         "articles_skipped": len(articles) - articles_indexed,
         "chunks_created": len(chunks),
         "chunks_indexed": indexed,
+        "chunks_skipped": len(chunks) - new_count,
         "collection_count": count,
     }

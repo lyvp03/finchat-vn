@@ -18,3 +18,4 @@ clickhouse-connect
 qdrant-client
 google-generativeai
 requests
+tenacity
