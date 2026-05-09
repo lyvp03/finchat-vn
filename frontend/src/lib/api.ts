@@ -49,3 +49,50 @@ export async function fetchAPI<T>(path: string, options?: FetchOptions): Promise
     } as ApiError;
   }
 }
+
+/**
+ * Fetch with cache support — returns cached data immediately and revalidates in background.
+ * Uses stale-while-revalidate pattern for near-instant perceived loads.
+ */
+export async function fetchWithSWR<T>(
+  path: string,
+  options?: FetchOptions & { ttlMs?: number }
+): Promise<{ data: T; fromCache: boolean }> {
+  const { ttlMs = 60000, ...fetchOpts } = options || {};
+  const cacheKey = `swr:${path}`;
+
+  // Try sessionStorage for cross-navigation persistence
+  try {
+    const raw = sessionStorage.getItem(cacheKey);
+    if (raw) {
+      const entry = JSON.parse(raw);
+      if (Date.now() < entry.expiry) {
+        // Return cached data immediately, revalidate in background
+        fetchAPI<T>(path, fetchOpts)
+          .then((freshData) => {
+            sessionStorage.setItem(cacheKey, JSON.stringify({
+              data: freshData,
+              expiry: Date.now() + ttlMs,
+            }));
+          })
+          .catch(() => {}); // Silently ignore bg revalidation errors
+        return { data: entry.data as T, fromCache: true };
+      }
+    }
+  } catch {
+    // sessionStorage unavailable (SSR), continue with fetch
+  }
+
+  const data = await fetchAPI<T>(path, fetchOpts);
+
+  try {
+    sessionStorage.setItem(cacheKey, JSON.stringify({
+      data,
+      expiry: Date.now() + ttlMs,
+    }));
+  } catch {
+    // Storage full or unavailable
+  }
+
+  return { data, fromCache: false };
+}

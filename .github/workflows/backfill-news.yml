@@ -15,6 +15,7 @@ on:
           - cafef
           - kitco
           - reuters
+          - vietnamnet
       limit:
         description: 'Number of articles per news source (ignored for price/market)'
         required: true
@@ -116,7 +117,7 @@ jobs:
             all)
               backfill_price
               backfill_market
-              for src in vnexpress cafef kitco reuters; do backfill_news $src; done
+              for src in vnexpress cafef kitco reuters vietnamnet; do backfill_news $src; done
               ;;
             price)   backfill_price ;;
             market)  backfill_market ;;

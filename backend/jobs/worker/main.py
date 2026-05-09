@@ -76,6 +76,10 @@ def job_update_reuters_news():
     _run_news_source("reuters")
 
 
+def job_update_vietnamnet_news():
+    _run_news_source("vietnamnet")
+
+
 def job_preprocess_news():
     logger.info("Triggering scheduled news preprocessing...")
     try:
@@ -124,6 +128,7 @@ if __name__ == "__main__":
     scheduler.add_job(job_update_kitco_news, 'interval', minutes=30, start_date='2026-01-01 00:10:00')
     scheduler.add_job(job_update_reuters_news, 'interval', minutes=30, start_date='2026-01-01 00:20:00')
     scheduler.add_job(job_update_cafef_news, 'interval', minutes=30, start_date='2026-01-01 00:05:00')
+    scheduler.add_job(job_update_vietnamnet_news, 'interval', minutes=30, start_date='2026-01-01 00:15:00')
 
     # Preprocessing — chạy mỗi 1 giờ, sau khi crawl xong
     scheduler.add_job(job_preprocess_news, 'interval', hours=1, start_date='2026-01-01 00:45:00')
