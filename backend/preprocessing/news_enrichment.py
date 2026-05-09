@@ -36,8 +36,7 @@ from utils.news_processing import (
 # LLM-based unified analyzer (primary for scoring/classification)
 from ml.news_analyzer import analyze_article
 
-# Legacy sentiment (only used as part of fallback)
-from ml.sentiment import score_sentiment
+# Removed legacy sentiment import
 
 logger = logging.getLogger("news_enrichment")
 
@@ -68,8 +67,8 @@ def _apply_rule_based_fallback(article: NewsArticle) -> None:
     article.market_scope = classify_market_scope(article)
     article.event_type = classify_event_type(article)
 
-    text_for_sentiment = f"{article.title}. {article.summary or ''}"[:500]
-    article.sentiment_score = score_sentiment(text_for_sentiment, language=article.language)
+    # Fallback sentiment is purely 0.0 when LLM is completely down
+    article.sentiment_score = 0.0
 
     article.impact_score = compute_impact_score(article)
     article.news_tier = classify_news_tier(article)
