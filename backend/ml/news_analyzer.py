@@ -17,6 +17,7 @@ Output fields
 
 import json
 import logging
+import yaml
 from dataclasses import dataclass
 from typing import Optional
 
@@ -50,7 +51,7 @@ class NewsAnalysis:
 
 # ── Prompt with detailed rubrics ─────────────────────────────────────────────
 
-_SYSTEM_PROMPT = """You are a gold market analyst AI. You analyze news articles and return structured JSON scores.
+_SYSTEM_PROMPT = """You are a gold market analyst AI. You analyze news articles and return structured YAML scores.
 
 You MUST follow the rubrics below EXACTLY. Do NOT guess — use the criteria.
 
@@ -116,8 +117,15 @@ Expected magnitude of gold price reaction.
 | contextual  | About factors that AFFECT gold (Fed, USD, inflation, geopolitics) but not directly a gold price report |
 | weak        | Loosely related, opinion pieces, general market commentary               |"""
 
-_USER_PROMPT_TEMPLATE = """Analyze this gold market news and return ONLY valid JSON (no markdown, no explanation):
-{{"sentiment_score": <float>, "relevance_score": <float>, "impact_score": <float>, "event_type": "<string>", "market_scope": "<string>", "news_tier": "<string>"}}
+_USER_PROMPT_TEMPLATE = """Analyze this gold market news and provide the output in valid YAML format inside a ```yaml``` block. Example format:
+```yaml
+sentiment_score: 0.8
+relevance_score: 1.0
+impact_score: 0.6
+event_type: "gold_price_update"
+market_scope: "domestic"
+news_tier: "direct"
+```
 
 Source: {source_name} ({language})
 Title: {title}
@@ -129,7 +137,7 @@ def _clamp(value: float, lo: float, hi: float) -> float:
 
 
 def _validate_analysis(raw: dict) -> Optional[NewsAnalysis]:
-    """Parse and validate raw JSON from LLM into a NewsAnalysis."""
+    """Parse and validate raw YAML/Dict from LLM into a NewsAnalysis."""
     try:
         sentiment = _clamp(float(raw.get("sentiment_score", 0)), -1.0, 1.0)
         relevance = _clamp(float(raw.get("relevance_score", 0)), 0.0, 1.0)
@@ -188,21 +196,30 @@ def analyze_article(
                     {"role": "system", "content": _SYSTEM_PROMPT},
                     {"role": "user", "content": user_prompt},
                 ],
-                "temperature": 1,
-                "max_tokens": 1000,
+                "temperature": 0.1,
+                "max_tokens": 3000,
             },
             timeout=120.0,
         )
-        response.raise_for_status()
-        raw_content = response.json()["choices"][0]["message"]["content"]
+        msg = response.json()["choices"][0]["message"]
+        raw_content = msg.get("content", "")
 
-        # Strip markdown fences if LLM wraps in ```json ... ```
+        if not raw_content.strip():
+            logger.warning("MiMo returned empty content. Full message: %s", msg)
+
+        # Strip markdown fences if LLM wraps in ```yaml ... ```
         cleaned = raw_content.strip()
         if cleaned.startswith("```"):
             cleaned = cleaned.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
 
-        result = json.loads(cleaned)
-        return _validate_analysis(result)
+        try:
+            result = yaml.safe_load(cleaned)
+            if not isinstance(result, dict):
+                raise ValueError("Parsed YAML is not a dictionary")
+            return _validate_analysis(result)
+        except (yaml.YAMLError, ValueError) as e:
+            logger.warning("YAML decode failed: %s. Raw LLM output: %s", e, repr(raw_content))
+            return None
 
     except Exception as e:
         logger.warning("News analysis LLM call failed: %s", e)
