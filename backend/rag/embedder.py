@@ -127,12 +127,15 @@ class GeminiEmbedder:
 
         url = (
             f"https://generativelanguage.googleapis.com/v1beta/models/"
-            f"{self.model}:batchEmbedContents?key={api_key}"
+            f"{self.model}:batchEmbedContents"
         )
         logger.debug("POST batchEmbedContents (%d texts) key=%s", len(texts), masked)
         response = httpx.post(
             url,
-            headers={"Content-Type": "application/json"},
+            headers={
+                "Content-Type": "application/json",
+                "x-goog-api-key": api_key
+            },
             json={"requests": requests},
             timeout=60.0,
         )
