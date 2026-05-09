@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { fetchAPI } from "@/lib/api";
+import { useState, useEffect, useCallback } from "react";
+import { fetchAPI, fetchWithSWR } from "@/lib/api";
 import { LatestNewsResponse, NewsArticle } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +10,6 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Loader2, ChevronLeft, ChevronRight, Search, ArrowUpRight, ArrowDownRight, Minus } from "lucide-react";
 import Link from "next/link";
-import { getCached, setCached } from "@/lib/cache";
 import { useRef } from "react";
 
 export default function NewsPage() {
@@ -24,7 +23,7 @@ export default function NewsPage() {
   const abortControllerRef = useRef<AbortController | null>(null);
   const seqIdRef = useRef(0);
 
-  const loadNews = async (searchQuery = "", marketScope = "all") => {
+  const loadNews = useCallback(async (searchQuery = "", marketScope = "all") => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
@@ -38,29 +37,27 @@ export default function NewsPage() {
       if (searchQuery.trim()) {
         endpoint = `/api/news/search?q=${encodeURIComponent(searchQuery)}&top_k=20`;
         if (marketScope !== "all") endpoint += `&market_scope=${marketScope}`;
+        // Search queries should not use SWR (always fresh)
+        const res = await fetchAPI<LatestNewsResponse>(endpoint, { signal: controller.signal });
+        if (currentSeq !== seqIdRef.current) return;
+        if (res.ok && res.articles) {
+          setArticles(res.articles);
+          setCurrentPage(1);
+        }
       } else {
         endpoint = `/api/news/latest-extended?limit=20`;
         if (marketScope !== "all") endpoint += `&market_scope=${marketScope}`;
-      }
-      
-      const cached = getCached<LatestNewsResponse>(endpoint);
-      if (cached) {
-        if (currentSeq === seqIdRef.current && cached.ok && cached.articles) {
-          setArticles(cached.articles);
+
+        const { data: res } = await fetchWithSWR<LatestNewsResponse>(endpoint, {
+          ttlMs: 60000,
+          signal: controller.signal,
+        });
+
+        if (currentSeq !== seqIdRef.current) return;
+        if (res.ok && res.articles) {
+          setArticles(res.articles);
           setCurrentPage(1);
-          setIsLoading(false);
         }
-        return;
-      }
-
-      const res = await fetchAPI<LatestNewsResponse>(endpoint, { signal: controller.signal });
-      
-      if (currentSeq !== seqIdRef.current) return;
-
-      if (res.ok && res.articles) {
-        setCached(endpoint, res, 60000); // Cache for 60s
-        setArticles(res.articles);
-        setCurrentPage(1);
       }
     } catch (err: any) {
       if (err.status === 408 || err.name === "AbortError") return;
@@ -70,15 +67,15 @@ export default function NewsPage() {
         setIsLoading(false);
       }
     }
-  };
+  }, []);
 
   useEffect(() => {
     // Debounce search
     const timer = setTimeout(() => {
       loadNews(query, scope);
-    }, 500);
+    }, query ? 500 : 0); // No debounce for initial load
     return () => clearTimeout(timer);
-  }, [query, scope]);
+  }, [query, scope, loadNews]);
 
   const getSentimentIcon = (score: number) => {
     if (score > 0.1) return <ArrowUpRight className="h-4 w-4" />;
@@ -121,9 +118,26 @@ export default function NewsPage() {
       </div>
 
       {isLoading && articles.length === 0 ? (
-        <div className="flex flex-col items-center justify-center p-16 text-muted-foreground bg-card/30 rounded-xl border border-border/50 border-dashed">
-          <Loader2 className="h-8 w-8 animate-spin mb-4 text-primary" />
-          <p>Đang truy xuất dữ liệu tin tức...</p>
+        <div className="grid gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div
+              key={i}
+              className="overflow-hidden border border-border/50 bg-gradient-to-r from-card to-card/50 shadow-sm rounded-xl"
+            >
+              <div className="p-5 space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className="h-6 w-20 bg-muted animate-pulse rounded-full" style={{ animationDelay: `${i * 100}ms` }} />
+                  <div className="h-6 w-24 bg-muted/60 animate-pulse rounded-full" style={{ animationDelay: `${i * 100 + 50}ms` }} />
+                  <div className="ml-auto h-4 w-28 bg-muted/40 animate-pulse rounded" />
+                </div>
+                <div className="space-y-2">
+                  <div className="h-6 w-3/4 bg-muted animate-pulse rounded" style={{ animationDelay: `${i * 100}ms` }} />
+                  <div className="h-4 w-full bg-muted/50 animate-pulse rounded" />
+                  <div className="h-4 w-2/3 bg-muted/50 animate-pulse rounded" />
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       ) : articles.length === 0 ? (
         <div className="text-center p-16 bg-card/30 rounded-xl border border-border/50 border-dashed">

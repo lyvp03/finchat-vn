@@ -1,17 +1,23 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { fetchAPI } from "@/lib/api";
+import { useState, useEffect, useCallback } from "react";
+import dynamic from "next/dynamic";
+import { fetchAPI, fetchWithSWR } from "@/lib/api";
 import { LatestPriceResponse, PriceData, PriceHistoryResponse, PriceTimeseriesResponse, PriceTimeseriesPoint } from "@/lib/types";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { ArrowUpRight, ArrowDownRight, RefreshCcw, Minus, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { PriceTrendChart } from "@/components/dashboard/price-trend-chart";
+import { ChartSkeleton } from "@/components/dashboard/skeletons";
 import { AVAILABLE_ASSETS } from "@/components/dashboard/dashboard-toolbar";
-import { getCached, setCached } from "@/lib/cache";
 import { useRef } from "react";
+
+// Lazy-load chart component
+const PriceTrendChart = dynamic(
+  () => import("@/components/dashboard/price-trend-chart").then(mod => ({ default: mod.PriceTrendChart })),
+  { ssr: false, loading: () => <ChartSkeleton /> }
+);
 
 export default function PricesPage() {
   const [data, setData] = useState<PriceData[]>([]);
@@ -26,7 +32,7 @@ export default function PricesPage() {
   const abortChartRef = useRef<AbortController | null>(null);
   const chartSeqIdRef = useRef(0);
 
-  const loadData = async (forceRefresh = false) => {
+  const loadData = useCallback(async (forceRefresh = false) => {
     if (abortLatestRef.current) {
       abortLatestRef.current.abort();
     }
@@ -37,22 +43,32 @@ export default function PricesPage() {
     setError(null);
     try {
       const endpoint = "/api/price/latest";
-      
-      if (!forceRefresh) {
-        const cached = getCached<LatestPriceResponse>(endpoint);
-        if (cached && cached.ok) {
-          setData(cached.prices);
-          setIsLoading(false);
-          return;
-        }
-      }
 
-      const res = await fetchAPI<LatestPriceResponse>(endpoint, { signal: controller.signal });
-      if (res.ok) {
-        setCached(endpoint, res, 15000); // 15s TTL for latest prices
-        setData(res.prices);
+      if (forceRefresh) {
+        // Force fresh fetch
+        const res = await fetchAPI<LatestPriceResponse>(endpoint, { signal: controller.signal });
+        if (res.ok) {
+          setData(res.prices);
+          // Update sessionStorage cache
+          try {
+            sessionStorage.setItem(`swr:${endpoint}`, JSON.stringify({
+              data: res,
+              expiry: Date.now() + 15000,
+            }));
+          } catch {}
+        } else {
+          setError("Không lấy được dữ liệu từ server");
+        }
       } else {
-        setError("Không lấy được dữ liệu từ server");
+        const { data: res } = await fetchWithSWR<LatestPriceResponse>(endpoint, {
+          ttlMs: 15000,
+          signal: controller.signal,
+        });
+        if (res.ok) {
+          setData(res.prices);
+        } else {
+          setError("Không lấy được dữ liệu từ server");
+        }
       }
     } catch (err: any) {
       if (err.status === 408 || err.name === "AbortError") return;
@@ -60,15 +76,14 @@ export default function PricesPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadData();
     return () => {
       if (abortLatestRef.current) abortLatestRef.current.abort();
     };
-  }, []);
+  }, [loadData]);
 
   useEffect(() => {
     async function loadChartData() {
@@ -80,32 +95,22 @@ export default function PricesPage() {
       const currentSeq = ++chartSeqIdRef.current;
 
       try {
-        const histUrl = `/api/price/history?type=${selectedAsset}&days=30`;
-        const tsUrl = `/api/price/timeseries?type=${selectedAsset}&days=30`;
-
-        const cachedHist = getCached<PriceHistoryResponse>(histUrl);
-        const cachedTs = getCached<PriceTimeseriesResponse>(tsUrl);
-
-        let histRes = cachedHist;
-        let tsRes = cachedTs;
-
-        const promises = [];
-        if (!histRes) promises.push(fetchAPI<PriceHistoryResponse>(histUrl, { signal: controller.signal }));
-        else promises.push(Promise.resolve(histRes));
-        
-        if (!tsRes) promises.push(fetchAPI<PriceTimeseriesResponse>(tsUrl, { signal: controller.signal }));
-        else promises.push(Promise.resolve(tsRes));
-
-        const [newHistRes, newTsRes] = await Promise.all(promises);
+        const [histResult, tsResult] = await Promise.all([
+          fetchWithSWR<PriceHistoryResponse>(`/api/price/history?type=${selectedAsset}&days=30`, {
+            ttlMs: 60000,
+            signal: controller.signal,
+          }),
+          fetchWithSWR<PriceTimeseriesResponse>(`/api/price/timeseries?type=${selectedAsset}&days=30`, {
+            ttlMs: 60000,
+            signal: controller.signal,
+          }),
+        ]);
 
         if (currentSeq !== chartSeqIdRef.current) return;
 
-        if (!cachedHist && newHistRes.ok) setCached(histUrl, newHistRes, 60000);
-        if (!cachedTs && newTsRes.ok) setCached(tsUrl, newTsRes, 60000);
-
-        if (newHistRes.ok) setHistory(newHistRes as PriceHistoryResponse);
-        if (newTsRes.ok && (newTsRes as PriceTimeseriesResponse).data) {
-          setTimeseries({ [selectedAsset]: (newTsRes as PriceTimeseriesResponse).data });
+        if (histResult.data.ok) setHistory(histResult.data);
+        if (tsResult.data.ok && (tsResult.data as PriceTimeseriesResponse).data) {
+          setTimeseries({ [selectedAsset]: (tsResult.data as PriceTimeseriesResponse).data });
         }
       } catch (e: any) {
         if (e.status === 408 || e.name === "AbortError") return;
@@ -152,13 +157,21 @@ export default function PricesPage() {
             </TableHeader>
             <TableBody>
               {isLoading && data.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-10 text-muted-foreground">
-                    <div className="flex justify-center items-center gap-2">
-                      <RefreshCcw className="h-4 w-4 animate-spin" /> Đang tải dữ liệu...
-                    </div>
-                  </TableCell>
-                </TableRow>
+                Array.from({ length: 6 }).map((_, i) => (
+                  <TableRow key={i} className="border-border/50">
+                    <TableCell>
+                      <div className="space-y-2">
+                        <div className="h-5 w-36 bg-muted animate-pulse rounded" style={{ animationDelay: `${i * 80}ms` }} />
+                        <div className="h-4 w-24 bg-muted/60 animate-pulse rounded" />
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right"><div className="h-5 w-28 bg-muted animate-pulse rounded ml-auto" /></TableCell>
+                    <TableCell className="text-right"><div className="h-5 w-28 bg-muted animate-pulse rounded ml-auto" /></TableCell>
+                    <TableCell className="text-right"><div className="h-5 w-20 bg-muted animate-pulse rounded ml-auto" /></TableCell>
+                    <TableCell className="text-right"><div className="h-5 w-16 bg-muted animate-pulse rounded ml-auto" /></TableCell>
+                    <TableCell className="text-right"><div className="h-4 w-16 bg-muted animate-pulse rounded ml-auto" /></TableCell>
+                  </TableRow>
+                ))
               ) : error ? (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center py-10 text-destructive">
@@ -229,9 +242,7 @@ export default function PricesPage() {
           {history ? (
             <PriceTrendChart histories={[history]} timeseries={timeseries} mode="single" />
           ) : (
-            <div className="h-full border border-border/50 rounded-xl bg-card/50 flex items-center justify-center text-muted-foreground">
-              Đang tải biểu đồ...
-            </div>
+            <ChartSkeleton />
           )}
         </div>
       </div>

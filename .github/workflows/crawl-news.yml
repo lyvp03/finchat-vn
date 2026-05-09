@@ -1,4 +1,4 @@
-name: Crawl News (VnExpress, Kitco, CafeF, Reuters)
+name: Crawl News (VnExpress, Kitco, CafeF, Reuters, VietnamNet)
 
 on:
   schedule:
@@ -39,9 +39,11 @@ jobs:
               job_update_kitco_news,
               job_update_cafef_news,
               job_update_reuters_news,
+              job_update_vietnamnet_news,
           )
           job_update_gold_news()
           job_update_kitco_news()
           job_update_cafef_news()
           job_update_reuters_news()
+          job_update_vietnamnet_news()
           "
