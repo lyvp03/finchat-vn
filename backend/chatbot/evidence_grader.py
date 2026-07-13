@@ -150,12 +150,17 @@ def format_evidence_for_prompt(grade: EvidenceGrade) -> str:
     ]
     if not grade.can_explain_cause:
         lines.append(
-            "INSTRUCTION: Do NOT assert causation. State that data is insufficient "
-            "to determine the cause. Only describe what the data shows."
+            "INSTRUCTION: The retrieved data is insufficient to definitively prove the cause. "
+            "First, explicitly state that current news is lacking details. "
+            "Then, to provide a high-quality, convincing analysis, you MUST HYPOTHESIZE the most likely macro drivers "
+            "(e.g., Fed interest rate expectations, DXY strength, US Treasury yields, or technical profit-taking) "
+            "based on the observed market movements. Clearly distinguish between facts (what the data shows) "
+            "and hypotheses. Use professional hedging language."
         )
     elif grade.confidence == "medium":
         lines.append(
-            "INSTRUCTION: You may suggest possible correlations but use hedging language "
-            '("có thể liên quan", "nhiều khả năng"). Do not assert definitive causation.'
+            "INSTRUCTION: You have partial evidence. You may suggest possible correlations but use hedging language "
+            '("có thể liên quan", "nhiều khả năng"). To make the analysis convincing, dive deeper into the '
+            "financial mechanics of WHY these factors (like XAUUSD or USDVND) might be driving the current trend."
         )
     return "\n".join(lines)

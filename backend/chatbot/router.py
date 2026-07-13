@@ -1,11 +1,15 @@
 """Rule-based intent router for gold finance questions."""
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 from typing import Any
 
+from chatbot.query_preprocessor import expand_synonyms
 from chatbot.time_range import normalize_text
+
+logger = logging.getLogger("router")
 
 
 GOLD_SYMBOL_KEYWORDS = (
@@ -142,7 +146,7 @@ def contains_any(text: str, keywords: tuple[str, ...]) -> bool:
 
 
 def analyze_question(question: str) -> RouteResult:
-    text = normalize_text(question)
+    text = expand_synonyms(normalize_text(question))
 
     has_out_of_scope = contains_any(text, OUT_OF_SCOPE_KEYWORDS)
     if has_out_of_scope:
@@ -233,3 +237,60 @@ def analyze_question(question: str) -> RouteResult:
 
 def route_question(question: str) -> str:
     return analyze_question(question).intent
+
+
+# ---------------------------------------------------------------
+# History-aware routing + confidence escalation
+# ---------------------------------------------------------------
+
+CONFIDENCE_ESCALATION_THRESHOLD = 0.7
+
+
+def analyze_question_with_history(
+    question: str,
+    history: list[dict] | None = None,
+) -> RouteResult:
+    """
+    Intent routing có context từ lịch sử hội thoại.
+
+    1. Chạy analyze_question bình thường.
+    2. Nếu confidence < 0.8 và có history → ghép câu hỏi trước để bổ sung signal.
+    3. Nếu confidence vẫn < 0.7 → escalate sang hybrid (trừ general).
+    """
+    route = analyze_question(question)
+
+    # Đã rõ ràng → trả ngay
+    if route.confidence >= 0.8:
+        return route
+
+    # Thử ghép history để bổ sung signal
+    if history:
+        last_user = next(
+            (m["content"] for m in reversed(history) if m.get("role") == "user"),
+            "",
+        )
+        if last_user:
+            combined = last_user + " " + question
+            route_combined = analyze_question(combined)
+            if route_combined.confidence > route.confidence:
+                logger.info(
+                    "[INTENT] History boost: %s→%s (%.2f→%.2f)",
+                    route.intent, route_combined.intent,
+                    route.confidence, route_combined.confidence,
+                )
+                route = route_combined
+
+    # Confidence escalation: vẫn thấp → fallback hybrid
+    if route.confidence < CONFIDENCE_ESCALATION_THRESHOLD and route.intent != "general":
+        logger.info(
+            "[INTENT] Low confidence %.2f → escalate %s to hybrid",
+            route.confidence, route.intent,
+        )
+        return RouteResult(
+            intent="hybrid",
+            confidence=route.confidence,
+            reason=f"Escalated from {route.intent} due to low confidence ({route.confidence:.2f})",
+            signals=route.signals,
+        )
+
+    return route

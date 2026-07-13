@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict
 
+from chatbot.query_rewriter import rewrite_for_retrieval
 from chatbot.time_range import extract_time_range, normalize_text
 from tools.news_tool import get_news_summary, search_news
 from tools.price_tool import get_latest_price, get_price_analysis
@@ -11,7 +12,7 @@ from tools.price_tool import get_latest_price, get_price_analysis
 logger = logging.getLogger("context_builder")
 
 
-def build_context(question: str, intent: str) -> Dict[str, Any]:
+def build_context(question: str, intent: str, budget_chars: dict[str, int] | None = None) -> Dict[str, Any]:
     """
     Gọi tools phù hợp với intent và trả về context dict.
 
@@ -100,16 +101,20 @@ def build_context(question: str, intent: str) -> Dict[str, Any]:
         to_ts = int(time_range.end.timestamp()) if time_range.end else None
         market_scope = _guess_market_scope(question)
 
+        # Rewrite query cho vector search
+        retrieval_query = rewrite_for_retrieval(question)
+        context["rewritten_query"] = retrieval_query if retrieval_query != normalize_text(question) else None
+
         logger.info(
-            "Searching news: from_ts=%s to_ts=%s market_scope=%s",
-            from_ts, to_ts, market_scope,
+            "Searching news: from_ts=%s to_ts=%s market_scope=%s retrieval_query=%r",
+            from_ts, to_ts, market_scope, retrieval_query[:60],
         )
 
         try:
             # Retrieve nhiều (RAG_CANDIDATE_K), compressor sẽ lọc top_n
             from core.config import settings
             news_result = search_news(
-                query=question,
+                query=retrieval_query,
                 top_k=settings.RAG_CANDIDATE_K,
                 published_from_ts=from_ts,
                 published_to_ts=to_ts,
@@ -164,26 +169,41 @@ def build_context(question: str, intent: str) -> Dict[str, Any]:
 
 def _guess_type_code(question: str) -> str:
     text = normalize_text(question)
+    # Check domestic brands FIRST — if user mentions SJC + "thế giới",
+    # they care about SJC price (not XAUUSD raw data).
+    has_sjc = "sjc" in text
+    has_doji = "doji" in text
+    has_btmc = "btmc" in text or "bao tin minh chau" in text
+    has_nhan = "nhan" in text or "9999" in text
+
+    if has_doji and ("hcm" in text or "ho chi minh" in text):
+        return "DOHCML"
+    if has_doji:
+        return "DOHNL"
+    if has_btmc:
+        return "BTSJC"
+    if has_nhan:
+        return "SJ9999"
+    if has_sjc:
+        return "SJL1L10"
+    # Only return XAUUSD when NO domestic brand is mentioned
     if "xau" in text or "the gioi" in text or "world" in text:
         return "XAUUSD"
-    if "doji" in text and ("hcm" in text or "ho chi minh" in text):
-        return "DOHCML"
-    if "doji" in text:
-        return "DOHNL"
-    if "btmc" in text or "bao tin minh chau" in text:
-        return "BTSJC"
-    if "nhan" in text or "9999" in text:
-        return "SJ9999"
     return "SJL1L10"
 
 
 def _guess_market_scope(question: str) -> str | None:
     text = normalize_text(question)
-    # World scope keywords
-    if any(k in text for k in ("the gioi", "world", "xau", "usd", "fed", "dollar")):
+    world_keywords = ("the gioi", "world", "xau", "usd", "fed", "dollar")
+    domestic_keywords = ("trong nuoc", "sjc", "doji", "btmc", "noi dia")
+    has_world = any(k in text for k in world_keywords)
+    has_domestic = any(k in text for k in domestic_keywords)
+    # If both mentioned → don't filter, search everything
+    if has_world and has_domestic:
+        return None
+    if has_world:
         return "international"
-    # Domestic explicit
-    if any(k in text for k in ("trong nuoc", "sjc", "doji", "btmc", "noi dia")):
+    if has_domestic:
         return "domestic"
     # Default: không filter scope → trả cả hai
     return None

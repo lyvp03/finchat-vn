@@ -19,6 +19,12 @@ export function KPICardsSkeleton() {
   );
 }
 
+// Deterministic bar heights to avoid SSR/client hydration mismatch
+const SKELETON_BAR_HEIGHTS = [
+  62, 45, 78, 53, 38, 87, 35, 59, 80, 73,
+  68, 42, 76, 50, 33, 85, 41, 70, 55, 90,
+];
+
 export function ChartSkeleton() {
   return (
     <div className="border border-border/50 bg-gradient-to-br from-card to-card/50 shadow-sm backdrop-blur-sm rounded-xl p-6 h-full flex flex-col">
@@ -27,19 +33,16 @@ export function ChartSkeleton() {
         <div className="h-5 w-40 bg-muted animate-pulse rounded" />
       </div>
       <div className="flex-1 min-h-[300px] flex items-end gap-1 px-4 pb-4">
-        {Array.from({ length: 20 }).map((_, i) => {
-          const height = 30 + Math.random() * 60;
-          return (
-            <div
-              key={i}
-              className="flex-1 bg-muted/50 animate-pulse rounded-t"
-              style={{
-                height: `${height}%`,
-                animationDelay: `${i * 50}ms`,
-              }}
-            />
-          );
-        })}
+        {SKELETON_BAR_HEIGHTS.map((height, i) => (
+          <div
+            key={i}
+            className="flex-1 bg-muted/50 animate-pulse rounded-t"
+            style={{
+              height: `${height}%`,
+              animationDelay: `${i * 50}ms`,
+            }}
+          />
+        ))}
       </div>
     </div>
   );
