@@ -34,12 +34,45 @@ def get_price_analysis(
 ) -> Dict[str, Any]:
     repo = GoldPriceRepository(get_clickhouse_client())
     time_range = extract_time_range(question) if question else _rolling_time_range(days)
+    
+    if time_range.type == "specific_single":
+        df = repo.get_data_range(type_code, time_range.start, time_range.end)
+        if df.empty:
+            return {
+                "ok": False, 
+                "type": "specific_single", 
+                "error": f"Không có dữ liệu giá cho ngày {time_range.start.strftime('%d/%m/%Y')}.",
+                "missing_dates": [time_range.start.strftime('%d/%m/%Y')],
+                "is_fallback": time_range.is_fallback
+            }
+        latest = df.iloc[-1]
+        return {
+            "ok": True,
+            "type": "specific_single",
+            "time_range_type": time_range.type,
+            "type_code": type_code,
+            "metadata": TYPE_CODE_METADATA.get(type_code, {}),
+            "from": _iso(latest["ts"]),
+            "to": _iso(latest["ts"]),
+            "latest": _format_price_row(latest),
+            "is_fallback": time_range.is_fallback
+        }
 
-    if time_range.type.startswith("compare_"):
+    if time_range.type.startswith("compare_") or time_range.type == "specific_comparison":
         result = _get_price_comparison(repo, type_code, time_range)
         # Fallback: if comparison fails, use a wider rolling window
         # so the LLM still has useful price context
         if not result.get("ok"):
+            if time_range.type == "specific_comparison":
+                missing = []
+                if result.get("missing", {}).get("current_period"):
+                    missing.append(time_range.current_start.strftime('%d/%m/%Y'))
+                if result.get("missing", {}).get("previous_period"):
+                    missing.append(time_range.previous_start.strftime('%d/%m/%Y'))
+                result["missing_dates"] = missing
+                result["is_fallback"] = time_range.is_fallback
+                return result
+                
             fallback_days = 60 if "month" in time_range.type else 30
             fallback_range = _rolling_time_range(fallback_days)
             fallback = _get_rolling_price_analysis(repo, type_code, fallback_range, days=fallback_days)
@@ -48,10 +81,15 @@ def get_price_analysis(
                 f"Thay vào đó, đây là phân tích xu hướng {fallback_days} ngày gần nhất."
             )
             fallback["_original_comparison"] = result.get("missing", {})
+            fallback["is_fallback"] = time_range.is_fallback
             return fallback
+        
+        result["is_fallback"] = time_range.is_fallback
         return result
 
-    return _get_rolling_price_analysis(repo, type_code, time_range, days=days)
+    result = _get_rolling_price_analysis(repo, type_code, time_range, days=days)
+    result["is_fallback"] = time_range.is_fallback
+    return result
 
 
 def _rolling_time_range(days: int) -> TimeRange:

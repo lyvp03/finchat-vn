@@ -79,4 +79,8 @@ class Settings:
     RAG_CONTEXT_TOP_N = int(os.getenv("RAG_CONTEXT_TOP_N", "8"))
     RAG_CONTEXT_MAX_CHARS = int(os.getenv("RAG_CONTEXT_MAX_CHARS", "800"))
 
+    # --- Context Management ---
+    TOTAL_CONTEXT_BUDGET = int(os.getenv("TOTAL_CONTEXT_BUDGET", "8000"))
+    MAX_PROMPT_TOKENS = int(os.getenv("MAX_PROMPT_TOKENS", "6000"))
+
 settings = Settings()

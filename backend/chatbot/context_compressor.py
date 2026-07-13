@@ -13,6 +13,7 @@ def compact_news_context(
     articles: List[Dict[str, Any]],
     top_n: int | None = None,
     max_chars_per_article: int | None = None,
+    budget_chars: int | None = None,
 ) -> str:
     """
     Rút gọn danh sách articles thành evidence blocks để đưa vào LLM.
@@ -21,12 +22,19 @@ def compact_news_context(
         articles: Danh sách articles từ vector store search.
         top_n: Số bài tối đa đưa vào LLM (default: RAG_CONTEXT_TOP_N).
         max_chars_per_article: Ký tự tối đa mỗi bài (default: RAG_CONTEXT_MAX_CHARS).
+        budget_chars: Ngân sách số lượng ký tự tổng cho phần tin tức.
 
     Returns:
         Chuỗi evidence blocks dạng text.
     """
-    top_n = top_n if top_n is not None else settings.RAG_CONTEXT_TOP_N
-    max_chars = max_chars_per_article if max_chars_per_article is not None else settings.RAG_CONTEXT_MAX_CHARS
+    if budget_chars is not None:
+        min_chars = 300
+        computed_top_n = max(1, budget_chars // min_chars)
+        top_n = min(computed_top_n, len(articles))
+        max_chars = budget_chars // max(1, top_n)
+    else:
+        top_n = top_n if top_n is not None else settings.RAG_CONTEXT_TOP_N
+        max_chars = max_chars_per_article if max_chars_per_article is not None else settings.RAG_CONTEXT_MAX_CHARS
 
     if not articles:
         logger.debug("compact_news_context: no articles to compact")
@@ -87,7 +95,13 @@ def format_price_context(price: Dict[str, Any] | None) -> str:
     if not price or not price.get("ok"):
         reason = (price or {}).get("error", "Không có dữ liệu giá.")
         logger.debug("format_price_context: no price data — %s", reason)
-        return f"(Không có dữ liệu giá: {reason})"
+        lines = [f"(Không có dữ liệu giá: {reason})"]
+        missing_dates = (price or {}).get("missing_dates")
+        if missing_dates:
+            lines.append("=== LƯU Ý DỮ LIỆU ===")
+            lines.append(f"Không có dữ liệu giá cho: {', '.join(missing_dates)}")
+            lines.append("INSTRUCTION: Phải nói rõ với người dùng là thiếu dữ liệu ngày này. KHÔNG được tự thay bằng khung thời gian khác để tính chênh lệch.")
+        return "\n".join(lines)
 
     price_type = price.get("type", "rolling")
 
@@ -112,6 +126,8 @@ def format_price_context(price: Dict[str, Any] | None) -> str:
                 lines.append(
                     f"  - {move.get('ts', '')[:10]}: {move.get('price_change', 0):+,.0f} (mid={move.get('mid_price', 0):,.0f})"
                 )
+        if price.get("is_fallback"):
+            lines.append("[NOTE] Hệ thống không tìm thấy mốc thời gian cụ thể, đang dùng mốc mặc định. INSTRUCTION: Vui lòng nói rõ với người dùng là bạn đang dùng mốc thời gian mặc định.")
         return "\n".join(lines)
 
     if price_type == "comparison":
@@ -128,6 +144,18 @@ def format_price_context(price: Dict[str, Any] | None) -> str:
                 f"Chênh lệch: {comp.get('current_avg_vs_previous_avg', 0):+,.0f} "
                 f"({comp.get('current_avg_vs_previous_avg_pct', 0):+.2f}%) → {comp.get('trend', 'N/A')}"
             )
+        if price.get("is_fallback"):
+            lines.append("[NOTE] Hệ thống không tìm thấy mốc thời gian cụ thể, đang dùng mốc mặc định. INSTRUCTION: Vui lòng nói rõ với người dùng là bạn đang dùng mốc thời gian mặc định.")
+        return "\n".join(lines)
+
+    if price_type == "specific_single":
+        latest = price.get("latest", {})
+        lines = [
+            f"Mã vàng: {price.get('type_code')} ({price.get('metadata', {}).get('name', '')})",
+            f"Ngày: {price.get('from', '')[:10]}",
+            f"Giá: mua {latest.get('buy_price', 0):,.0f} / bán {latest.get('sell_price', 0):,.0f} (mid: {latest.get('mid_price', 0):,.0f})",
+            "INSTRUCTION: Bắt buộc phải nêu rõ ngày tháng đang được nhắc đến trong câu trả lời (ví dụ: 'Giá vàng ngày 13/07/2026 là...')."
+        ]
         return "\n".join(lines)
 
     return str(price)
